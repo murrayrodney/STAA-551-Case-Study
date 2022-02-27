@@ -9,3 +9,105 @@ output: pdf_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+```{r, include=FALSE}
+library(dplyr)
+library(ggplot2)
+library(GGally)
+library(tidyr)
+library(reshape)
+```
+
+
+# Summary statistics
+First we will load a data and show the first few rows.
+```{r}
+data <- read.csv('Prevend_Sample.csv')
+names(data) <- tolower(names(data)) # Convert column names to lower case
+head(data)
+```
+## Missing Values
+First I will look for missing values.
+```{r}
+colSums(is.na(data))
+summary(data)
+
+sum(data$hdl < 0)
+
+sum(data$frs < 0)
+```
+It appears that we have no explicity missing values. 
+We do have two values for `hdl` < 0, I will remove those an expect a minimal impact on the conclusions drawn later. We can always add those points back in if we are interested in a model that does not include `hdl`.
+There appear to be some invalid values for `smoking` (< 0)
+I'm also suspicious of `vat` < 0
+I am suspicious of the values of `frs` < 0. I may remove those for now.
+The rest of the values appear to be within their exp
+```{r}
+data <- data %>% 
+  replace(data < 0, NA) %>% # Replace all of the invalid values with NA
+  drop_na() # Get rid of all of the rows with NA's
+nrow(data)
+```
+
+It looks like if we drop all of the invalid values we will loose 42 observations. I will move forward with this since it may be unlikely to materially effect our conclusions. After we choose our model, it would be good to revisit and only drop na's for the columns that we are using in our model. We may also want to think about how the invalid values could have been generated and if there is a potential for that process to have effected the outcomes that we observe.
+
+Now I will make all of the categorical variables in the data a factor type so that we can use them in our models without issues
+
+```{r}
+data <- mutate(data, 
+       gender = factor(gender),
+       ethnicity = factor(ethnicity),
+       education = factor(education),
+       cvd = factor(cvd),
+       dm = factor(dm),
+       smoking = factor(smoking),
+       hypertension = factor(hypertension),
+       albuminuria = factor(albuminuria),
+       statin = factor(statin)
+       
+       )
+```
+
+
+## Distribution of prediction value and key values
+We are interested in how different variables (particularly `statin`) effect cognitive decline `rfft`. We also have 19 other variables that we will decide what we will have to do with. First lets take a look at the distributions and potential relationship between `rfft` and `statin`.
+* Because of our interested between these two variables we can say that our most basic model will be $rfft = \beta_0 + \beta_1 statin$.
+* Because statin is a categorical variable with two levels, I imagine that we will likely find more variables that help describe variance in `rfft`
+```{r}
+fig <- ggplot(data, aes(x=rfft)) + geom_density()
+fig
+
+summary(data$statin)
+
+fig <- ggplot(data, aes(x=statin, y=rfft)) + 
+  geom_boxplot(fill='dodgerblue', alpha=0.4) +
+  geom_jitter(height=0, width=0.25, alpha=0.5) +
+  geom_blank()
+fig
+```
+
+It does appear that there may be higher coginitive function with lower statin use. Before we build a model with this variable, lets take a look at how the numerical variables in our data correlate with `rfft`. 
+Because there are too many variables to generate pair plots that we can read, I will calculate the correlation between all numerical variables in the data and make a heatmap that we can analyze.
+
+```{r, warning=FALSE, message=FALSE}
+data_num <- select_if(data, is.numeric)
+corrs <- cor(data_num) %>%
+  data.frame()
+corrs <- corrs %>%  
+  mutate(var1=rownames(corrs)) %>% 
+  melt(id='var1')
+
+corrs
+
+ggplot(corrs, aes(var1, variable, fill=value)) + 
+  geom_tile() +
+  scale_fill_continuous(type='viridis')
+  geom_blank()
+```
+
+It appears that our highest correlations with RFFT are with 
+  * `chol` 
+  * `egfr`
+  * `hld`
+  * `vat`
+  
+We will now look at some pairs plots to understand the potential correlations between these values.
