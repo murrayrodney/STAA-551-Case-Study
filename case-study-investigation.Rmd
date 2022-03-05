@@ -17,6 +17,8 @@ library(tidyr)
 library(reshape)
 library(car)
 library(gridExtra)
+library(formula.tools)
+library(stringr)
 ```
 
 
@@ -143,6 +145,34 @@ It appears that some variables such as ethnicity and education could have signif
 
 # Modeling
 
+```{r model-tracking}
+track_model_perf <- function(model, new_model_name, prev_model_perf=NULL) {
+  sum_obj <- summary(model)
+  new_formula <- toString(sum_obj$terms)
+  
+  model_perf <- data.frame(
+    model_name=new_model_name,
+    formula=new_formula,
+    n_coef=length(model$coefficients),
+    r_squared_mult=sum_obj$r.squared,
+    r_squared_adj=sum_obj$adj.r.squared,
+    f_calc=sum_obj$fstatistic['value'],
+    aic=AIC(model),
+    bic=BIC(model)
+    )
+  
+  if (!is.null(prev_model_perf)) {
+    # prev_model_perf <- filter(prev_model_perf, formula != new_formula)
+    prev_model_perf <- filter(prev_model_perf, model_name != new_model_name)
+    model_perf <-  bind_rows(prev_model_perf, model_perf)
+    
+  }
+  
+  return(model_perf)
+}
+model_perf <- data.frame()
+```
+
 ## No Extra Categoricals
 I will try a model without any extra categoricals, but we will include `statin` because it is a variable of interest in our study.
 ```{r model-no-extra-cats}
@@ -152,11 +182,13 @@ starting_data <- bind_cols(numerical_data, select(data, statin))
 starting_model <- lm(rfft ~ ., starting_data)
 summary(starting_model)
 plot(starting_model)
+model_perf <- track_model_perf(starting_model, 'Starting Model')
 ```
 ```{r model-no-extra-cat-interactions}
 starting_interaction_model <- lm(rfft ~ .^2, starting_data)
 summary(starting_interaction_model)
 ```
+
 
 ## Full model
 Lets start with the full model and examine some of our assumptions
@@ -170,6 +202,8 @@ ggplot() + geom_point(aes(x=data$rfft, y=full_model$fitted.values))
 plot(full_model) # Typical diagnostic plots
 plot(full_model, 4) # Just cooks distances as bar
 acf(full_model$residuals) # Looking for autocorrelation
+
+model_perf <- track_model_perf(full_model, 'Full Model')
 ```
 
 It appears that our F statistic says the model as a whole is describing a significant portion of data, but the adjusted (and multiple) R squared value is less than 0.5, so I suspect we have a ways to go. There are some variables that appear to be significant with the leave-one-out approach for the t-tests, there are a few with high p-values that we may choose to leave out of the model later on.
@@ -219,6 +253,8 @@ trans_data <- select(trans_data, -rfft)
 trans_full_model <- lm(rfft_sqrt ~ ., data=trans_data)
 summary(trans_full_model)
 plot(trans_full_model)
+
+model_perf <- track_model_perf(trans_full_model, 'Full Model Box Cox', model_perf)
 ```
 
 ```{r look-at-resids}
@@ -247,6 +283,7 @@ inter_model <- lm(rfft ~ .^2, data=data)
 summary(inter_model)
 length(inter_model$coefficients)
 plot(inter_model)
+model_perf <- track_model_perf(inter_model, 'Full Model Interactions', model_perf)
 ```
 Wow, that is a big model with > 200 coefficients! Certainly not something that we would want to keep, the R^2 is better but our adjusted R^2 is only marginally better and the AIC/BIC are worse since we have so many parameters. Can we get something that captures more variance, but with fewer parameters?
 ```{r interactions-metrics}
@@ -281,6 +318,8 @@ print(length(poly_model$coefficients))
 summary(poly_model)
 length(poly_model$coefficients)
 plot(poly_model)
+
+model_perf <- track_model_perf(poly_model, 'Full Model Polynomials', model_perf)
 ```
 
 ## Feature Selection
@@ -295,6 +334,7 @@ forward_aic <- step(base_model, scope=scope, direction='forward', data=data, tra
 # Analyze model
 summary(forward_aic)
 plot(forward_aic)
+model_perf <- track_model_perf(forward_aic, 'Full Model Forward AIC', model_perf)
 ```
 
 
@@ -307,7 +347,8 @@ backward_aic <- step(full_model, scope=scope, direction='backward', data=data, t
 
 # Analyze model
 summary(backward_aic)
-plot(bakcward_aic)
+plot(backward_aic)
+model_perf <- track_model_perf(backward_aic, 'Full Model Backward AIC', model_perf)
 ```
 
 ### Interactions
@@ -321,6 +362,7 @@ forward_aic_inter <- step(base_model, scope=scope, direction='forward', data=dat
 # Analyze model
 summary(forward_aic_inter)
 plot(forward_aic_inter)
+model_perf <- track_model_perf(forward_aic_inter, 'Interaction Model Forward AIC', model_perf)
 ```
 
 ```{r model-metrics}
@@ -348,6 +390,7 @@ forward_aic_poly <- step(base_model, scope=scope, direction='forward', data=data
 # Analyze model
 summary(forward_aic_poly)
 plot(forward_aic_poly)
+model_perf <- track_model_perf(forward_aic_poly, 'Polynomial Model Forward AIC', model_perf)
 ```
 
 
@@ -355,7 +398,16 @@ plot(forward_aic_poly)
 ```{r poly-backward-AIC}
 base_model <- lm(rfft ~ statin, data=data)
 scope <- list(lower=base_model, upper=poly_model)
-backward_aic_poly <- step(poly_model, scope=scope, direction='backward', data=data, trace=-1 )
+backward_aic_poly <- step(poly_model, scope=scope, direction='backward', data=data, trace=0)
 summary(backward_aic_poly)
+model_perf <- track_model_perf(backward_aic_poly, 'Polynomial Model Backward AIC', model_perf)
+```
+
+### Analyze model performance
+We made some observations above, but it may be easier to compare everything here
+
+```{r}
+model_perf <- arrange(model_perf, aic)
+model_perf
 ```
 
