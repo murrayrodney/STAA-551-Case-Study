@@ -10,10 +10,10 @@
 #' @export
 #'
 #' @examples
-get_formulas <- function(columns, n_var=5, base_formula='rfft ~ 1', interactions=NULL) {
+get_formulas <- function(columns, n_var=2, base_formula='rfft ~ 1', interactions=NULL) {
   # Get all of the possible combinations
   n_cols = length(columns)
-  combs <- combinations(n=n_numerical_cols, r=n_var, v=columns)
+  combs <- combinations(n=n_cols, r=n_var, v=columns)
   df <- data.frame(combs)
   
   # combine variables into one formula
@@ -38,17 +38,24 @@ get_formulas <- function(columns, n_var=5, base_formula='rfft ~ 1', interactions
 #'
 #' Given a vector of column names, create a dataframe with all possible combinations of any length
 #' @param columns Vector of columns to create combinations for
+#' @param base_formula Base formula as a string for combinations to be attached to
 #' @param interactions Degree of interactions
 #'
 #' @return Returns a dataframe with all of the variables and formulas for a set of combinations
 #' @export
 #'
 #' @examples
-get_all_formula_combs <- function(columns, interactions=NULL) {
+get_all_formula_combs <- function(columns, base_formula='rfft ~ 1', interactions=NULL) {
   formulas <- data.frame()
   n_vars <- 1:length(columns)
   for (i in n_vars) {
-    formulas <- bind_rows(formulas, get_formulas(columns, n_var=i, interactions=interactions))
+    formulas <- bind_rows(formulas, 
+                          get_formulas(columns, 
+                                       n_var=i, 
+                                       base_formula=base_formula, 
+                                       interactions=interactions
+                                       )
+                          )
   }
   return(formulas)
 }
