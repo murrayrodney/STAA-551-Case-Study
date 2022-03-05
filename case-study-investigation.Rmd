@@ -9,7 +9,7 @@ output: pdf_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r, include=FALSE}
+```{r imports, include=FALSE}
 library(dplyr)
 library(ggplot2)
 library(GGally)
@@ -22,14 +22,14 @@ library(gridExtra)
 
 # Summary statistics
 First we will load a data and show the first few rows.
-```{r}
+```{r data-load}
 data <- read.csv('Prevend_Sample.csv')
 names(data) <- tolower(names(data)) # Convert column names to lower case
 head(data)
 ```
 ## Missing Values
 First I will look for missing values.
-```{r}
+```{r find-missing-values}
 data <- select(data, -casenr) # we don't need the case number
 colSums(is.na(data))
 summary(data)
@@ -38,10 +38,6 @@ sum(data$hdl < 0)
 
 sum(data$frs < 0)
 ```
-```{r}
-summary(select(data, smoking, chol))
-```
-
 
 It appears that we have no explicity missing values. 
 We do have two values for `hdl` < 0, I will remove those an expect a minimal impact on the conclusions drawn later. We can always add those points back in if we are interested in a model that does not include `hdl`.
@@ -49,7 +45,7 @@ There appear to be some invalid values for `smoking` (< 0)
 I'm also suspicious of `vat` < 0
 I am suspicious of the values of `frs` < 0. I may remove those for now.
 The rest of the values appear to be within their exp
-```{r}
+```{r drop-nas}
 data <- data %>% 
   replace(data < 0, NA) %>% # Replace all of the invalid values with NA
   drop_na() # Get rid of all of the rows with NA's
@@ -60,7 +56,7 @@ It looks like if we drop all of the invalid values we will loose 42 observations
 
 Now I will make all of the categorical variables in the data a factor type so that we can use them in our models without issues
 
-```{r}
+```{r make-factors}
 data <- mutate(data, 
        gender = factor(gender),
        ethnicity = factor(ethnicity),
@@ -72,7 +68,6 @@ data <- mutate(data,
        albuminuria = factor(albuminuria),
        statin = factor(statin)
        )
-data
 ```
 
 
@@ -80,7 +75,7 @@ data
 We are interested in how different variables (particularly `statin`) effect cognitive decline `rfft`. We also have 19 other variables that we will decide what we will have to do with. First lets take a look at the distributions and potential relationship between `rfft` and `statin`.
 * Because of our interested between these two variables we can say that our most basic model will be $rfft = \beta_0 + \beta_1 statin$.
 * Because statin is a categorical variable with two levels, I imagine that we will likely find more variables that help describe variance in `rfft`
-```{r}
+```{r plot-summaries}
 fig <- ggplot(data, aes(x=rfft)) + geom_density()
 fig
 
@@ -96,7 +91,7 @@ fig
 It does appear that there may be higher coginitive function with lower statin use. Before we build a model with this variable, lets take a look at how the numerical variables in our data correlate with `rfft`. 
 Because there are too many variables to generate pair plots that we can read, I will calculate the correlation between all numerical variables in the data and make a heatmap that we can analyze.
 
-```{r, warning=FALSE, message=FALSE}
+```{r plot-correlations, warning=FALSE, message=FALSE}
 data_num <- select_if(data, is.numeric)
 corrs <- cor(data_num) %>%
   data.frame()
@@ -119,7 +114,7 @@ It appears that our highest correlations with RFFT are with
   * `vat`
   
 We will now look at some pairs plots to understand the potential correlations between these values.
-```{r}
+```{r numerical-pair-plot}
 cols <- c('chol', 'egfr', 'hdl', 'vat', 'rfft')
 sub_data <- select(data, cols)
 ggpairs(sub_data, aes(alpha=0.5))
@@ -128,7 +123,7 @@ ggpairs(sub_data, aes(alpha=0.5))
 It looks like `vat` and `rfft` have the most correlation, but none of the variables have a very high correlation.
 
 Lets also look at some of the categorical variables 
-```{r}
+```{r categorical-box-plots}
 factor_data <- select_if(data, is.factor)
 factor_cols <- names(factor_data)
 plots <- 1:length(factor_cols)
@@ -150,7 +145,7 @@ It appears that some variables such as ethnicity and education could have signif
 
 ## No Extra Categoricals
 I will try a model without any extra categoricals, but we will include `statin` because it is a variable of interest in our study.
-```{r}
+```{r model-no-extra-cats}
 numerical_data <- select_if(data, is.numeric)
 starting_data <- bind_cols(numerical_data, select(data, statin))
 
@@ -158,32 +153,31 @@ starting_model <- lm(rfft ~ ., starting_data)
 summary(starting_model)
 plot(starting_model)
 ```
-```{r}
+```{r model-no-extra-cat-interactions}
 starting_interaction_model <- lm(rfft ~ .^2, starting_data)
 summary(starting_interaction_model)
 ```
 
 ## Full model
 Lets start with the full model and examine some of our assumptions
-```{r}
+```{r full-model}
+# Fit the full model, get a summary, and make interesting plots
 full_model <- lm(rfft ~ ., data=data)
+
 summary(full_model)
-```
 
-It appears that our F statistic says the model as a whole is describing a significant portion of data, but the adjusted (and multiple) R squared value is less than 0.5, so I suspect we have a ways to go. There are some variables that appear to be significant with the leave-one-out approach for the t-tests, there are a few with high p-values that we may choose to leave out of the model later on.
-
-Now lets take a look at the residuals
-```{r}
 ggplot() + geom_point(aes(x=data$rfft, y=full_model$fitted.values))
 plot(full_model) # Typical diagnostic plots
 plot(full_model, 4) # Just cooks distances as bar
 acf(full_model$residuals) # Looking for autocorrelation
 ```
 
+It appears that our F statistic says the model as a whole is describing a significant portion of data, but the adjusted (and multiple) R squared value is less than 0.5, so I suspect we have a ways to go. There are some variables that appear to be significant with the leave-one-out approach for the t-tests, there are a few with high p-values that we may choose to leave out of the model later on.
+
 I don't see any clear trends in the mean of the residuals which is a good sign. I am worried about the constant variance assumption, so we may look at some transformations or WLS. The variance seems to increase as the fitted values increase. The QQ plot shows that there is no reason to believe that the residuals are not normally distributed. The cooks distances for our data do not indicate any points that we should likely be concerned about.
 
 Let's take a quick look at the absolute values of the variance
-```{r}
+```{r more-resid-plots}
 fit_val <- full_model$fitted.values
 resid <- full_model$residuals
 abs_resid <- abs(resid)
@@ -206,16 +200,13 @@ I went ahead and fit a linear model to the absolute value of the residuals to se
 
 ### Box Cox
 Lets try transforming the response with a Box Cox transformation
-```{r}
+```{r box-cox-transformation}
 boxCox(full_model)
 ```
 From the above it might make sense to try a square root transformation
 
-```{r}
-```
 
-
-```{r}
+```{r plot-transformation}
 trans_data <- mutate(data, rfft_sqrt = sqrt(rfft))
 cols <- c('chol', 'egfr', 'hdl', 'vat', 'rfft_sqrt')
 sub_data <- select(trans_data, cols)
@@ -223,14 +214,14 @@ ggpairs(sub_data, aes(alpha=0.5))
 ```
 Hard to tell from this plot that it made any difference. We can quickly try the model
 
-```{r}
+```{r model-box-cox}
 trans_data <- select(trans_data, -rfft)
 trans_full_model <- lm(rfft_sqrt ~ ., data=trans_data)
 summary(trans_full_model)
 plot(trans_full_model)
 ```
 
-```{r}
+```{r look-at-resids}
 fit_val <- trans_full_model$fitted.values
 resid <- trans_full_model$residuals
 abs_resid <- abs(resid)
@@ -251,14 +242,14 @@ To be honest when I compare the plots side-by-side I feel like I have a hard tim
 Alternatively...after looking at the observed values vs. the fitted values, there may be some non-linear relationships that we should see if we can investigate.
 
 ### Interactions
-```{r}
+```{r model-interactions}
 inter_model <- lm(rfft ~ .^2, data=data)
 summary(inter_model)
 length(inter_model$coefficients)
 plot(inter_model)
 ```
 Wow, that is a big model with > 200 coefficients! Certainly not something that we would want to keep, the R^2 is better but our adjusted R^2 is only marginally better and the AIC/BIC are worse since we have so many parameters. Can we get something that captures more variance, but with fewer parameters?
-```{r}
+```{r interactions-metrics}
 AIC(full_model)
 AIC(inter_model)
 
@@ -266,9 +257,8 @@ BIC(full_model)
 BIC(inter_model)
 ```
 
-
 ### Polynomial
-```{r}
+```{r get-polynomial-formula}
 numeric_data <- select_if(data, is.numeric)
 numeric_data <- select(numeric_data, -rfft)
 cols <- paste('poly(', names(numeric_data), ',2)', collapse = ' + ')
@@ -285,62 +275,55 @@ formula
 ```
 
 
-```{r}
+```{r model-polynomial}
 poly_model <- lm(formula, data=data)
 print(length(poly_model$coefficients))
 summary(poly_model)
-
-```
-
-```{r}
 length(poly_model$coefficients)
 plot(poly_model)
 ```
 
-
-```{r}
-AIC(full_model)
-AIC(poly_model)
-
-BIC(full_model)
-BIC(poly_model)
-```
-
-
 ## Feature Selection
 ### Full model
 #### Forward AIC
-```{r}
+```{r full-model-forward-AIC}
+# Define the base model, scope, and execute the stepwise addition of variables
 base_model <- lm(rfft ~ statin, data=data)
 scope <- list(lower=base_model, upper=full_model)
+forward_aic <- step(base_model, scope=scope, direction='forward', data=data, trace = 0)
 
-forward_aic <- step(base_model, scope=scope, direction='forward', data=data)
-```
-```{r}
+# Analyze model
 summary(forward_aic)
 plot(forward_aic)
 ```
 
+
 #### Backward AIC
-```{r}
+```{r full-model-backward-AIC}
+# Define base model, scoope and execute the stepwise removal of variables
 base_model <- lm(rfft ~ statin, data=data)
 scope <- list(lower=base_model, upper=full_model)
+backward_aic <- step(full_model, scope=scope, direction='backward', data=data, trace=0)
 
-backward_aic <- step(full_model, scope=scope, direction='backward', data=data)
+# Analyze model
 summary(backward_aic)
+plot(bakcward_aic)
 ```
 
 ### Interactions
 #### Forward AIC
-```{r}
+```{r interactions-forward-AIC}
+# Define base model, scope and execute stepwise addition of variables
 base_model <- lm(rfft ~ statin, data=data)
 scope <- list(lower=base_model, upper=inter_model)
 forward_aic_inter <- step(base_model, scope=scope, direction='forward', data=data, trace=0)
+
+# Analyze model
 summary(forward_aic_inter)
 plot(forward_aic_inter)
 ```
 
-```{r}
+```{r model-metrics}
 AIC(starting_model)
 AIC(full_model)
 AIC(inter_model)
@@ -356,32 +339,23 @@ summary(forward_aic_inter)$adj.r.squared
 ### Polynomial
 #### Forward AIC
 We will take the polynomial model that we fit above, and see what features are really needed. Notice that for our base model we will at a minimum include the statin use since that is a variable of influence that we are particularly interested in.
-```{r}
+```{r poly-forward-aic}
+# Define base model, scope, and execute forward addition of variables
 base_model <- lm(rfft ~ statin, data=data)
 scope <- list(lower=base_model, upper=poly_model)
+forward_aic_poly <- step(base_model, scope=scope, direction='forward', data=data, trace=0)
 
-forward_aic_poly <- step(base_model, scope=scope, direction='forward', data=data)
-```
-
-```{r}
+# Analyze model
 summary(forward_aic_poly)
 plot(forward_aic_poly)
 ```
 
-```{r}
-AIC(forward_aic)
-AIC(forward_aic_poly)
-```
 
 #### Backward AIC
-```{r}
+```{r poly-backward-AIC}
 base_model <- lm(rfft ~ statin, data=data)
 scope <- list(lower=base_model, upper=poly_model)
-
-# backward_aic_poly <- step(poly_model, scope=scope, direction='backward', data=data, trace=-1 )
-```
-
-```{r}
+backward_aic_poly <- step(poly_model, scope=scope, direction='backward', data=data, trace=-1 )
 summary(backward_aic_poly)
 ```
 
