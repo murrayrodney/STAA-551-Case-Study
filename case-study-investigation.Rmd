@@ -22,6 +22,7 @@ library(stringr)
 library(broom)
 library(tidyr)
 library(gtools)
+library(docstring)
 ```
 
 
@@ -425,7 +426,20 @@ fig
 
 
 ## Brute Force Methods
-```{r}
+```{r define functions for brute force methods}
+
+#' Get formula combinations 
+#'
+#' Given a vector of columns, return a dataframe with formulas for all combinations of a specified length
+#' @param columns A vector of columns
+#' @param n_var Number of variables to construct combinations for 
+#' @param base_formula Base formula as a string for combinations to be attached to
+#' @param interactions Degree of interactions to specify
+#'
+#' @return Returns a dataframe with all of the variables and formulas for a set of combinations
+#' @export
+#'
+#' @examples
 get_formulas <- function(columns, n_var=5, base_formula='rfft ~ 1', interactions=NULL) {
   # Get all of the possible combinations
   n_cols = length(columns)
@@ -448,34 +462,62 @@ get_formulas <- function(columns, n_var=5, base_formula='rfft ~ 1', interactions
 
   return (df)
 }
+
+#' Get all possible combinations
+#'
+#' Given a vector of column names, create a dataframe with all possible combinations of any length
+#' @param columns Vector of columns to create combinations for
+#' @param interactions Degree of interactions
+#'
+#' @return Returns a dataframe with all of the variables and formulas for a set of combinations
+#' @export
+#'
+#' @examples
+get_all_formula_combs <- function(columns, interactions=NULL) {
+  formulas <- data.frame()
+  n_vars <- 1:length(columns)
+  for (i in n_vars) {
+    formulas <- bind_rows(formulas, get_formulas(columns, n_var=i, interactions=interactions))
+  }
+  return(formulas)
+}
+
+
+#' Fit all models in a dataframe
+#'
+#' @param formulas A dataframe with all variables and formulas
+#' @param data A dataframe to with the data for fitting the model
+#'
+#' @return A tibble with model performance for all of the specified models, uses broom::tidy
+#' @export
+#'
+#' @examples
+fit_all_models <- function(formulas, data) {
+  for (i in 1:nrow(formulas)) {
+    formula <- formulas$formula[i]
+    model <- lm(formula, data=data)
+    
+    if (i == 1) {
+      model_perf <- track_model_perf(model, as.character(i))
+    } else {
+      model_perf <- track_model_perf(model, as.character(i), model_perf)
+    }
+  }
+  model_perf$interaction <- factor(formulas$interaction)
+  
+  return(model_perf)
+}
 ```
 
 ### Numerical vars
 ```{r get-all-numerical-formulas}
 numerical_cols <- names(select(numerical_data, -rfft))
-formulas <- data.frame()
+numerical_formulas <- get_all_formula_combs(numerical_cols, interactions=2)
 
-n_vars <- 1:length(numerical_cols)
-for (i in n_vars) {
-  formulas <- bind_rows(formulas, get_formulas(numerical_cols, n_var=i))
-  formulas <- bind_rows(formulas, get_formulas(numerical_cols, n_var=i, interactions=2))
-}
-
-formulas
 ```
 
 ```{r}
-for (i in 1:nrow(formulas)) {
-  formula <- formulas$formula[i]
-  model <- lm(formula, data=data)
-  if (i == 1) {
-    numerical_perf <- track_model_perf(model, as.character(i))
-  } else {
-    numerical_perf <- track_model_perf(model, as.character(i), numerical_perf)
-  }
-}
-numerical_perf$interaction <- factor(formulas$interaction)
-
+numerical_perf <- fit_all_models(numerical_formulas)
 ```
 
 
@@ -486,5 +528,8 @@ fig <- ggplot(numerical_perf, aes(x=adj.r.squared, y=AIC, color=interaction)) +
 fig
 ```
 
+### Numerical Additive Categorical
+```{r}
 
+```
 
