@@ -88,8 +88,7 @@ fit_all_models <- function(formulas, data) {
 
 calc_if_used <- function(df, columns) {
   for (col in columns) {
-    is_col <- na.replace(df == col, FALSE)
-    df <- mutate(df, !!col := factor(rowSums(is_col)))
+    df <- mutate(df, !!col := grepl(col, formula))
   }
   return(df)
 }
