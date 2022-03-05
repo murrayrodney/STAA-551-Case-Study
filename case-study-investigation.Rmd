@@ -19,6 +19,7 @@ library(car)
 library(gridExtra)
 library(formula.tools)
 library(stringr)
+library(broom)
 ```
 
 
@@ -149,20 +150,12 @@ It appears that some variables such as ethnicity and education could have signif
 track_model_perf <- function(model, new_model_name, prev_model_perf=NULL) {
   sum_obj <- summary(model)
   new_formula <- toString(sum_obj$terms)
-  
-  model_perf <- data.frame(
-    model_name=new_model_name,
-    formula=new_formula,
-    n_coef=length(model$coefficients),
-    r_squared_mult=sum_obj$r.squared,
-    r_squared_adj=sum_obj$adj.r.squared,
-    f_calc=sum_obj$fstatistic['value'],
-    aic=AIC(model),
-    bic=BIC(model)
-    )
+
+  model_perf <- glance(model)
+  model_perf$formula = new_formula
+  model_perf$model_name = new_model_name
   
   if (!is.null(prev_model_perf)) {
-    # prev_model_perf <- filter(prev_model_perf, formula != new_formula)
     prev_model_perf <- filter(prev_model_perf, model_name != new_model_name)
     model_perf <-  bind_rows(prev_model_perf, model_perf)
     
@@ -407,23 +400,24 @@ model_perf <- track_model_perf(backward_aic_poly, 'Polynomial Model Backward AIC
 We made some observations above, but it may be easier to compare everything here
 
 ```{r model-performance, fig.width=5, fig.height=3}
-model_perf <- arrange(model_perf, aic)
+model_perf <- arrange(model_perf, AIC)
 plot_model_perf <- filter(model_perf, !model_name %in% c('Full Model Box Cox', 'Full Model Interactions'))
-select(plot_model_perf, model_name, r_squared_adj, aic)
+select(plot_model_perf, model_name, adj.r.squared, AIC)
 
 
 
-fig <- ggplot(plot_model_perf, aes(y=model_name, x=aic)) + 
+fig <- ggplot(plot_model_perf, aes(y=model_name, x=AIC)) + 
   geom_bar(stat='identity') +
   coord_cartesian(xlim=c(4000, 4200)) +
   geom_blank()
 fig
 
-fig <- ggplot(plot_model_perf, aes(x=r_squared_adj, y=aic, label=model_name)) +
+fig <- ggplot(plot_model_perf, aes(x=adj.r.squared, y=AIC, label=model_name)) +
   geom_point(size=5, alpha=0.6, color='cornflowerblue') +
   geom_text(nudge_y = 1, check_overlap=TRUE) +
   xlim(0.445, 0.51) +
   labs(x=expression(Radj^2), y='AIC')
 fig
 ```
+
 
