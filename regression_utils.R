@@ -17,7 +17,7 @@ get_formulas <- function(columns, n_var=2, base_formula='rfft ~ 1', interactions
   df <- data.frame(combs)
   
   # combine variables into one formula
-  df_form <- data.frame(response=base_formula)
+  df_form <- data.frame(base_formula=base_formula)
   df <- bind_cols(df_form, df)
   df_cols <- names(df)
   
@@ -84,4 +84,12 @@ fit_all_models <- function(formulas, data) {
   model_perf$interaction <- factor(formulas$interaction)
   
   return(model_perf)
+}
+
+calc_if_used <- function(df, columns) {
+  for (col in columns) {
+    is_col <- na.replace(df == col, FALSE)
+    df <- mutate(df, !!col := factor(rowSums(is_col)))
+  }
+  return(df)
 }
