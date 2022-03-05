@@ -20,6 +20,8 @@ library(gridExtra)
 library(formula.tools)
 library(stringr)
 library(broom)
+library(tidyr)
+library(gtools)
 ```
 
 
@@ -419,5 +421,70 @@ fig <- ggplot(plot_model_perf, aes(x=adj.r.squared, y=AIC, label=model_name)) +
   labs(x=expression(Radj^2), y='AIC')
 fig
 ```
+
+
+
+## Brute Force Methods
+```{r}
+get_formulas <- function(columns, n_var=5, base_formula='rfft ~ 1', interactions=NULL) {
+  # Get all of the possible combinations
+  n_cols = length(columns)
+  combs <- combinations(n=n_numerical_cols, r=n_var, v=columns)
+  df <- data.frame(combs)
+  
+  # combine variables into one formula
+  df_form <- data.frame(response=base_formula)
+  df <- bind_cols(df_form, df)
+  df_cols <- names(df)
+  
+  df <- unite(df, 'formula', sep=' + ', remove=FALSE)
+  if (!is.null(interactions)) {
+    df <- mutate(df,
+                 formula = str_replace(formula, '~ 1 +', '~ ( '),
+                 formula = paste(formula, ')^', as.character(interactions), sep=''),
+                 interaction = interactions
+                 )
+  } else {df <- mutate(df, interaction=1)}
+
+  return (df)
+}
+```
+
+### Numerical vars
+```{r get-all-numerical-formulas}
+numerical_cols <- names(select(numerical_data, -rfft))
+formulas <- data.frame()
+
+n_vars <- 1:length(numerical_cols)
+for (i in n_vars) {
+  formulas <- bind_rows(formulas, get_formulas(numerical_cols, n_var=i))
+  formulas <- bind_rows(formulas, get_formulas(numerical_cols, n_var=i, interactions=2))
+}
+
+formulas
+```
+
+```{r}
+for (i in 1:nrow(formulas)) {
+  formula <- formulas$formula[i]
+  model <- lm(formula, data=data)
+  if (i == 1) {
+    numerical_perf <- track_model_perf(model, as.character(i))
+  } else {
+    numerical_perf <- track_model_perf(model, as.character(i), numerical_perf)
+  }
+}
+numerical_perf$interaction <- factor(formulas$interaction)
+
+```
+
+
+```{r}
+fig <- ggplot(numerical_perf, aes(x=adj.r.squared, y=AIC, color=interaction)) +
+  geom_point(alpha=0.6) +
+  labs(x=expression(Radj^2), y='AIC')
+fig
+```
+
 
 
