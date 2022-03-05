@@ -441,7 +441,7 @@ base_formula <- best_numerical_formula
 num_cat_formulas <- get_all_formula_combs(factor_cols, base_formula = best_numerical_formula)
 num_cat_perf <- fit_all_models(num_cat_formulas, data)
 
-num_cat_perf <- bind_cols(num_cat_perf, num_cat_formulas)
+num_cat_perf <- bind_cols(select(num_cat_perf, -formula), num_cat_formulas)
 num_cat_perf <- calc_if_used(num_cat_perf, factor_cols)
 head(num_cat_perf)
 ```
@@ -452,6 +452,8 @@ fig <- ggplot(num_cat_perf, aes(x=adj.r.squared, y=AIC, color=education)) +
   geom_point(alpha=0.6) +
   labs(x=expression(Radj^2), y='AIC')
 fig
+
+filter(num_cat_perf, AIC == min(num_cat_perf$AIC))
 ```
 
 
