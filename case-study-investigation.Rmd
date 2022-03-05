@@ -30,6 +30,7 @@ head(data)
 ## Missing Values
 First I will look for missing values.
 ```{r}
+data <- select(data, -casenr) # we don't need the case number
 colSums(is.na(data))
 summary(data)
 
@@ -37,6 +38,11 @@ sum(data$hdl < 0)
 
 sum(data$frs < 0)
 ```
+```{r}
+summary(select(data, smoking, chol))
+```
+
+
 It appears that we have no explicity missing values. 
 We do have two values for `hdl` < 0, I will remove those an expect a minimal impact on the conclusions drawn later. We can always add those points back in if we are interested in a model that does not include `hdl`.
 There appear to be some invalid values for `smoking` (< 0)
@@ -66,6 +72,7 @@ data <- mutate(data,
        albuminuria = factor(albuminuria),
        statin = factor(statin)
        )
+data
 ```
 
 
@@ -141,6 +148,21 @@ It appears that some variables such as ethnicity and education could have signif
 
 # Modeling
 
+## No Extra Categoricals
+I will try a model without any extra categoricals, but we will include `statin` because it is a variable of interest in our study.
+```{r}
+numerical_data <- select_if(data, is.numeric)
+starting_data <- bind_cols(numerical_data, select(data, statin))
+
+starting_model <- lm(rfft ~ ., starting_data)
+summary(starting_model)
+plot(starting_model)
+```
+```{r}
+starting_interaction_model <- lm(rfft ~ .^2, starting_data)
+summary(starting_interaction_model)
+```
+
 ## Full model
 Lets start with the full model and examine some of our assumptions
 ```{r}
@@ -152,6 +174,7 @@ It appears that our F statistic says the model as a whole is describing a signif
 
 Now lets take a look at the residuals
 ```{r}
+ggplot() + geom_point(aes(x=data$rfft, y=full_model$fitted.values))
 plot(full_model) # Typical diagnostic plots
 plot(full_model, 4) # Just cooks distances as bar
 acf(full_model$residuals) # Looking for autocorrelation
@@ -175,5 +198,190 @@ fig <- ggplot() +
     color='red') +
   labs(x='Fitted Values', y='Residuals')
 fig
+plot(resid_lm)
+```
+I went ahead and fit a linear model to the absolute value of the residuals to see what kind if trends it might reveal. Interestingly enough the p-values from the linear model seem to indicate that there could be a linear relationship in the residuals, looking at the $R^2$ value though shows that the model does not capture a large amount of variance (0.03) even though it is deemed significant by the F-test for the model!
+
+## Transformations
+
+### Box Cox
+Lets try transforming the response with a Box Cox transformation
+```{r}
+boxCox(full_model)
+```
+From the above it might make sense to try a square root transformation
+
+```{r}
+```
+
+
+```{r}
+trans_data <- mutate(data, rfft_sqrt = sqrt(rfft))
+cols <- c('chol', 'egfr', 'hdl', 'vat', 'rfft_sqrt')
+sub_data <- select(trans_data, cols)
+ggpairs(sub_data, aes(alpha=0.5))
+```
+Hard to tell from this plot that it made any difference. We can quickly try the model
+
+```{r}
+trans_data <- select(trans_data, -rfft)
+trans_full_model <- lm(rfft_sqrt ~ ., data=trans_data)
+summary(trans_full_model)
+plot(trans_full_model)
+```
+
+```{r}
+fit_val <- trans_full_model$fitted.values
+resid <- trans_full_model$residuals
+abs_resid <- abs(resid)
+trans_resid_lm <- lm(abs_resid ~ fit_val)
+summary(trans_resid_lm)
+
+fig <- ggplot() + 
+  geom_point(aes(trans_full_model$fitted.values, abs(trans_full_model$residuals)), alpha=0.5) +
+  geom_abline(
+    intercept=trans_resid_lm$coefficients['(Intercept)'], 
+    slope=trans_resid_lm$coefficients['fit_val'], 
+    color='red') +
+  labs(x='Fitted Values', y='Residuals')
+fig
+```
+To be honest when I compare the plots side-by-side I feel like I have a hard time seeing any obvious differences in the plots after applying the square root transformation to the response variable. With that said the linear models appear to suggest that there is a low probability that we would see the trend in absolute values of residuals if there were no relationship, but this may be better addres with a WLS model.
+
+Alternatively...after looking at the observed values vs. the fitted values, there may be some non-linear relationships that we should see if we can investigate.
+
+### Interactions
+```{r}
+inter_model <- lm(rfft ~ .^2, data=data)
+summary(inter_model)
+length(inter_model$coefficients)
+plot(inter_model)
+```
+Wow, that is a big model with > 200 coefficients! Certainly not something that we would want to keep, the R^2 is better but our adjusted R^2 is only marginally better and the AIC/BIC are worse since we have so many parameters. Can we get something that captures more variance, but with fewer parameters?
+```{r}
+AIC(full_model)
+AIC(inter_model)
+
+BIC(full_model)
+BIC(inter_model)
+```
+
+
+### Polynomial
+```{r}
+numeric_data <- select_if(data, is.numeric)
+numeric_data <- select(numeric_data, -rfft)
+cols <- paste('poly(', names(numeric_data), ',2)', collapse = ' + ')
+
+factor_cols <- names(select_if(data, is.factor))
+factor_cols <- paste(factor_cols, collapse = ' + ')
+
+cols <- paste(c(cols, factor_cols), collapse = ' + ')
+formula <- paste('rfft ~ .^2 +', cols, collapse=' ')
+formula <- paste('rfft ~ ', cols, collapse=' ')
+# formula
+formula <- as.formula(formula)
+formula
+```
+
+
+```{r}
+poly_model <- lm(formula, data=data)
+print(length(poly_model$coefficients))
+summary(poly_model)
+
+```
+
+```{r}
+length(poly_model$coefficients)
+plot(poly_model)
+```
+
+
+```{r}
+AIC(full_model)
+AIC(poly_model)
+
+BIC(full_model)
+BIC(poly_model)
+```
+
+
+## Feature Selection
+### Full model
+#### Forward AIC
+```{r}
+base_model <- lm(rfft ~ statin, data=data)
+scope <- list(lower=base_model, upper=full_model)
+
+forward_aic <- step(base_model, scope=scope, direction='forward', data=data)
+```
+```{r}
+summary(forward_aic)
+plot(forward_aic)
+```
+
+#### Backward AIC
+```{r}
+base_model <- lm(rfft ~ statin, data=data)
+scope <- list(lower=base_model, upper=full_model)
+
+backward_aic <- step(full_model, scope=scope, direction='backward', data=data)
+summary(backward_aic)
+```
+
+### Interactions
+#### Forward AIC
+```{r}
+base_model <- lm(rfft ~ statin, data=data)
+scope <- list(lower=base_model, upper=inter_model)
+forward_aic_inter <- step(base_model, scope=scope, direction='forward', data=data, trace=0)
+summary(forward_aic_inter)
+plot(forward_aic_inter)
+```
+
+```{r}
+AIC(starting_model)
+AIC(full_model)
+AIC(inter_model)
+AIC(forward_aic_inter)
+
+summary(starting_model)$adj.r.squared
+summary(full_model)$adj.r.squared
+summary(inter_model)$adj.r.squared
+summary(forward_aic_inter)$adj.r.squared
+```
+
+
+### Polynomial
+#### Forward AIC
+We will take the polynomial model that we fit above, and see what features are really needed. Notice that for our base model we will at a minimum include the statin use since that is a variable of influence that we are particularly interested in.
+```{r}
+base_model <- lm(rfft ~ statin, data=data)
+scope <- list(lower=base_model, upper=poly_model)
+
+forward_aic_poly <- step(base_model, scope=scope, direction='forward', data=data)
+```
+
+```{r}
+summary(forward_aic_poly)
+plot(forward_aic_poly)
+```
+
+```{r}
+AIC(forward_aic)
+AIC(forward_aic_poly)
+```
+
+#### Backward AIC
+```{r}
+base_model <- lm(rfft ~ statin, data=data)
+scope <- list(lower=base_model, upper=poly_model)
+
+# backward_aic_poly <- step(poly_model, scope=scope, direction='backward', data=data, trace=-1 )
+```
+
+```{r}
+summary(backward_aic_poly)
 ```
 
