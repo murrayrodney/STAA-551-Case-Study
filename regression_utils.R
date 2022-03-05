@@ -1,3 +1,21 @@
+track_model_perf <- function(model, new_model_name, prev_model_perf=NULL, add_formula=TRUE) {
+  sum_obj <- summary(model)
+  new_formula <- toString(sum_obj$terms)
+  
+  model_perf <- glance(model)
+  model_perf$formula = new_formula
+  if (add_formula) {model_perf$model_name = new_model_name}
+  
+  if (!is.null(prev_model_perf)) {
+    prev_model_perf <- filter(prev_model_perf, model_name != new_model_name)
+    model_perf <-  bind_rows(prev_model_perf, model_perf)
+    
+  }
+  
+  return(model_perf)
+}
+
+
 #' Get formula combinations 
 #'
 #' Given a vector of columns, return a dataframe with formulas for all combinations of a specified length

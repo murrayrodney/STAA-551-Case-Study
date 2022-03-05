@@ -150,26 +150,6 @@ It appears that some variables such as ethnicity and education could have signif
 
 # Modeling
 
-```{r model-tracking}
-track_model_perf <- function(model, new_model_name, prev_model_perf=NULL) {
-  sum_obj <- summary(model)
-  new_formula <- toString(sum_obj$terms)
-
-  model_perf <- glance(model)
-  model_perf$formula = new_formula
-  model_perf$model_name = new_model_name
-  
-  if (!is.null(prev_model_perf)) {
-    prev_model_perf <- filter(prev_model_perf, model_name != new_model_name)
-    model_perf <-  bind_rows(prev_model_perf, model_perf)
-    
-  }
-  
-  return(model_perf)
-}
-model_perf <- data.frame()
-```
-
 ## No Extra Categoricals
 I will try a model without any extra categoricals, but we will include `statin` because it is a variable of interest in our study.
 ```{r model-no-extra-cats}
