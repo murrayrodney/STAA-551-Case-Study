@@ -42,7 +42,7 @@ get_formulas <- function(columns, n_var=2, base_formula='rfft ~ 1', interactions
   df <- unite(df, 'formula', sep=' + ', remove=FALSE)
   if (!is.null(interactions)) {
     df <- mutate(df,
-                 formula = str_replace(formula, '~ 1 +', '~ ( '),
+                 formula = str_replace(formula, '~ ', '~ ( '),
                  formula = paste(formula, ')^', as.character(interactions), sep=''),
                  interaction = interactions
     )
@@ -88,8 +88,12 @@ get_all_formula_combs <- function(columns, base_formula='rfft ~ 1', interactions
 #' @export
 #'
 #' @examples
-fit_all_models <- function(formulas, data) {
+fit_all_models <- function(formulas, data, print_freq=1e6) {
+  print('Starting loop')
+  print_freq = as.integer(print_freq)
   for (i in 1:nrow(formulas)) {
+    if (i %% print_freq  == 0) {print(i)}
+    
     formula <- formulas$formula[i]
     model <- lm(formula, data=data)
     
@@ -99,6 +103,7 @@ fit_all_models <- function(formulas, data) {
       model_perf <- track_model_perf(model, as.character(i), model_perf)
     }
   }
+  print('Finished')
   model_perf$interaction <- factor(formulas$interaction)
   
   return(model_perf)
@@ -109,4 +114,21 @@ calc_if_used <- function(df, columns) {
     df <- mutate(df, !!col := grepl(col, formula))
   }
   return(df)
+}
+
+fit_all_models_parallel <- function(formulas, data, type='FORK') {
+  # Setup for parallel computing
+  n_cores <- parallel::detectCores() - 1
+  my_cluster <- parallel::makeCluster(n_cores, type='FORK')
+  doParallel::registerDoParallel(cl=my_cluster)
+  
+  # Fit all the models
+  model_perf <- foreach(i=1:nrow(formulas), .combine=bind_rows) %dopar% {
+    formula <- formulas$formula[i]
+    model <- lm(formula, data)
+    track_model_perf(model, as.character(i))
+  }
+  
+  parallel::stopCluster(my_cluster)
+  return(model_perf)
 }
