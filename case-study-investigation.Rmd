@@ -23,6 +23,8 @@ library(broom)
 library(tidyr)
 library(gtools)
 library(docstring)
+# library(svMisc)
+library(doParallel)
 source('regression_utils.R')
 ```
 
@@ -435,6 +437,8 @@ best_numerical_formula
 
 
 ### Numerical Additive Categorical
+
+We'll start with the best numerical formula and add categorical variables in such that they are additive.
 ```{r}
 factor_cols <- names(factor_data)
 base_formula <- best_numerical_formula
@@ -453,7 +457,62 @@ fig <- ggplot(num_cat_perf, aes(x=adj.r.squared, y=AIC, color=education)) +
   labs(x=expression(Radj^2), y='AIC')
 fig
 
-filter(num_cat_perf, AIC == min(num_cat_perf$AIC))
+filter(num_cat_perf, AIC == min(num_cat_perf$AIC))$formula
+```
+
+### Numerical Categorical Interaction
+```{r}
+num_cat_formulas_mult <- get_all_formula_combs(factor_cols, base_formula = best_numerical_formula, interaction=2)
+num_cat_formulas_mult <- bind_rows(num_cat_formulas, num_cat_formulas_mult)
+num_cat_mult_perf <- fit_all_models(num_cat_formulas_mult, data)
+
+num_cat_mult_perf <- bind_cols(select(num_cat_mult_perf, -formula), num_cat_formulas_mult)
+num_cat_mult_perf <- calc_if_used(num_cat_mult_perf, factor_cols)
+```
+```{r}
+num_cat_formulas_mult
 ```
 
 
+```{r}
+fig <- ggplot(num_cat_mult_perf, aes(x=adj.r.squared, y=AIC, color=education)) +
+  geom_point(alpha=0.6) +
+  labs(x=expression(Radj^2), y='AIC')
+fig
+
+num_cat_mult_perf %>% 
+  filter(AIC == min(AIC)) %>% 
+  select(formula, AIC, BIC, adj.r.squared)
+```
+
+### All columns
+**Gave this a try, doesn't seem that I can get the models to run in any reasonable amount of time**
+```{r}
+input_data <- select(data, -rfft, -statin, -education, -age)
+all_cols <- names(input_data)
+
+base_formula <- 'rfft ~ statin + education + age'
+all_formulas <- get_all_formula_combs(all_cols, base_formula = base_formula)
+all_formulas <- bind_rows(all_formulas,
+                          get_all_formula_combs(all_cols, base_formula=base_formula, interactions=2))
+all_formulas
+```
+
+## WLS
+```{r}
+min_index <- which.min(plot_model_perf$AIC)
+best_formula <- as.formula(plot_model_perf$formula[min_index])
+
+best_ols <- lm(best_formula, data=data)
+summary(best_ols)
+plot(best_ols)
+```
+Let's take a look at these singularities, I will see how many observations we have for each 
+unique group for education and ethnicity
+```{r}
+data %>% 
+  group_by(education, ethnicity) %>% 
+  count()
+```
+From the above we can see there are some combinations between education and ethnicity that don't exist, after
+seein this it is no surprise that we are seeing NA's from singularities.
