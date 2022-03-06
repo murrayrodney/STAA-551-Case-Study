@@ -67,7 +67,7 @@ Now I will make all of the categorical variables in the data a factor type so th
 ```{r make-factors}
 data <- mutate(data, 
        gender = factor(gender),
-       ethnicity = factor(ethnicity),
+       # ethnicity = factor(ethnicity),
        education = factor(education),
        cvd = factor(cvd),
        dm = factor(dm),
@@ -148,6 +148,13 @@ for (col in factor_cols) {
 ```
 
 It appears that some variables such as ethnicity and education could have significant impacts on the model.
+
+**After carefull evaluation of the data Valerie noticed that there are very fiew values for ethnicity that do not correspond to Western European, which lead us to the decision to remove this variable for consideration in the model**
+
+```{r}
+data <- select(data, -ethnicity)
+```
+
 
 # Modeling
 
@@ -346,20 +353,23 @@ plot(forward_aic_inter, 4)
 model_perf <- track_model_perf(forward_aic_inter, 'Interaction Model Forward AIC', model_perf)
 acf(forward_aic_inter$residuals)
 ```
+#### Forward BIC
+```{r interactions-forward-BIC}
+# Define base model, scope and execute stepwise addition of variables
+base_model <- lm(rfft ~ statin, data=data)
+scope <- list(lower=base_model, upper=inter_model)
+n <- nrow(data)
+forward_bic_inter <- step(base_model, scope=scope, direction='forward', data=data, trace=0, k=log(n))
 
-
-```{r model-metrics}
-AIC(starting_model)
-AIC(full_model)
-AIC(inter_model)
-AIC(forward_aic_inter)
-
-summary(starting_model)$adj.r.squared
-summary(full_model)$adj.r.squared
-summary(inter_model)$adj.r.squared
-summary(forward_aic_inter)$adj.r.squared
+# Analyze model
+summary(forward_bic_inter)
+length(forward_bic_inter$coefficients)
+AIC(forward_bic_inter)
+plot(forward_bic_inter)
+plot(forward_bic_inter, 4)
+model_perf <- track_model_perf(forward_bic_inter, 'Interaction Model Forward BIC', model_perf)
+acf(forward_bic_inter$residuals)
 ```
-
 
 ### Polynomial
 #### Forward AIC
@@ -389,7 +399,7 @@ model_perf <- track_model_perf(backward_aic_poly, 'Polynomial Model Backward AIC
 ### Analyze model performance
 We made some observations above, but it may be easier to compare everything here
 
-```{r model-performance, fig.width=5, fig.height=3}
+```{r model-performance}
 model_perf <- arrange(model_perf, AIC)
 plot_model_perf <- filter(model_perf, !model_name %in% c('Full Model Box Cox', 'Full Model Interactions'))
 select(plot_model_perf, model_name, adj.r.squared, AIC)
@@ -537,17 +547,6 @@ best_input_data <- data %>%
 
 cor(best_input_data)
 ```
-
-
-Let's take a look at these singularities, I will see how many observations we have for each 
-unique group for education and ethnicity
-```{r}
-data %>% 
-  group_by(education, ethnicity) %>% 
-  count()
-```
-From the above we can see there are some combinations between education and ethnicity that don't exist, after
-seeing this it is no surprise that we are seeing NA's from singularities.
 
 Now we will look at using a model to help capture some of the variance in residals.
 ```{r}
