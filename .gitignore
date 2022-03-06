@@ -3,3 +3,5 @@
 .RData
 .Ruserdata
 *.Rproj
+case-study-investigation_files/figure-latex/*.pdf
+.DS_Store

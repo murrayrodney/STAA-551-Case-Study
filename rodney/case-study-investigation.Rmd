@@ -23,7 +23,6 @@ library(broom)
 library(tidyr)
 library(gtools)
 library(docstring)
-# library(svMisc)
 library(doParallel)
 source('regression_utils.R')
 ```
@@ -32,7 +31,7 @@ source('regression_utils.R')
 # Summary statistics
 First we will load a data and show the first few rows.
 ```{r data-load}
-data <- read.csv('Prevend_Sample.csv')
+data <- read.csv('../data/Prevend_Sample.csv')
 names(data) <- tolower(names(data)) # Convert column names to lower case
 head(data)
 ```
@@ -340,9 +339,14 @@ forward_aic_inter <- step(base_model, scope=scope, direction='forward', data=dat
 
 # Analyze model
 summary(forward_aic_inter)
+length(forward_aic_inter$coefficients)
+AIC(forward_aic_inter)
 plot(forward_aic_inter)
+plot(forward_aic_inter, 4)
 model_perf <- track_model_perf(forward_aic_inter, 'Interaction Model Forward AIC', model_perf)
+acf(forward_aic_inter$residuals)
 ```
+
 
 ```{r model-metrics}
 AIC(starting_model)
@@ -499,14 +503,42 @@ all_formulas
 ```
 
 ## WLS
-```{r}
+```{r get-best-ols}
 min_index <- which.min(plot_model_perf$AIC)
 best_formula <- as.formula(plot_model_perf$formula[min_index])
 
 best_ols <- lm(best_formula, data=data)
 summary(best_ols)
+# vif(best_ols) # Get errors due to missing categories
 plot(best_ols)
 ```
+
+
+```{r analyze-resid-vs-predictors}
+ols_results <- data.frame(augment(best_ols))
+cols <- names(ols_results)
+added_cols = cols[grepl('[.]',cols)]
+orig_cols <- cols[!grepl('[.]',cols)]
+
+ols_plot <- ols_results %>% 
+  melt(id.vars=added_cols) %>% 
+  mutate(value=as.double(value)) %>% 
+  filter(variable != 'rfft')
+
+fig <- ggplot(ols_plot, aes(x=value, y=.resid)) +
+  facet_wrap(vars(variable), ncol=3, scales='free_x') +
+  geom_point(alpha=0.4)
+fig
+```
+```{r}
+best_input_data <- data %>% 
+  select(orig_cols) %>% 
+  select_if(is.numeric)
+
+cor(best_input_data)
+```
+
+
 Let's take a look at these singularities, I will see how many observations we have for each 
 unique group for education and ethnicity
 ```{r}
@@ -515,4 +547,29 @@ data %>%
   count()
 ```
 From the above we can see there are some combinations between education and ethnicity that don't exist, after
-seein this it is no surprise that we are seeing NA's from singularities.
+seeing this it is no surprise that we are seeing NA's from singularities.
+
+Now we will look at using a model to help capture some of the variance in residals.
+```{r}
+abs_resid <- abs(best_ols$residuals)
+fitted_vals <- best_ols$fitted.values
+resid_model <- lm(abs_resid ~ fitted_vals)
+summary(resid_model)
+
+fig <- ggplot() +
+  geom_point(aes(x=fitted_vals, y=abs_resid)) +
+  geom_abline(
+    intercept=resid_model$coefficients['(Intercept)'],
+    slope=resid_model$coefficients['fitted_vals'],
+    color='red'
+    )
+fig
+```
+
+```{r}
+est_var <- resid_model$fitted.values^2
+wls <- lm(best_formula, data=data, weights=1/est_var)
+summary(wls)
+plot(wls)
+```
+

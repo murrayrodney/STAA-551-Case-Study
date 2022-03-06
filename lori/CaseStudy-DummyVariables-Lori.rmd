@@ -1,0 +1,302 @@
+---
+title: "Case Study Dummy Variables"
+author: "Lori Hernandez"
+output: word_document
+---
+
+##**Summary Statistics and Graphics**
+```{r}
+prevend <- read.csv("../data/Prevend_Sample.csv")
+```
+
+**Check for NA values**
+```{r}
+sapply(prevend, anyNA)
+```
+
+**Summary Statistics**
+```{r}
+summary(prevend)
+```
+
+Several columns appear to have invalid values present: VAT, which should range from 0 to 12, as negative values present (min = -1); Smoking, which should have only 0 of 1, has negative values present (min = -1); HDL, which should only be positive values, has negative values present (min = -1); and FRS, which should be only positive values, has negative values present (min = -2).  To deal with these invalid values, I will clean the data by changing all negative values to NA and then removing all rows with any NA values before starting my analysis; once I feel confident about my model and determine which predictor variables will be included, I will go back and only remove the rows with NA values in the relevant columns.
+
+```{r}
+#replacing negative values in the 4 relevant columns with NA
+prevend$VAT <- replace(prevend$VAT, prevend$VAT < 0, NA)
+prevend$Smoking <- replace(prevend$Smoking, prevend$Smoking < 0, NA)
+prevend$HDL <- replace(prevend$HDL, prevend$HDL < 0, NA)
+prevend$FRS <- replace(prevend$FRS, prevend$FRS < 0, NA)
+
+#count the number of rows that have an NA value present
+sum(!complete.cases(prevend))
+```
+
+
+```{r}
+#remove all rows that contain any NA values
+prevend <- na.omit(prevend)
+```
+
+The variable Case Number is not relevant for this analysis, so I will remove it from my data frame
+```{r}
+prevend <- prevend[ ,-1]
+```
+
+##**Analysis**
+
+There are many categorical variables in this data frame; I will convert these variables to be factors
+```{r}
+categorical <- c("Gender", "Ethnicity", "Education", "CVD", "DM", "Smoking", "Hypertension", "Albuminuria", "Statin")
+prevend[, categorical] <- lapply(prevend[, categorical], factor)
+str(prevend)
+```
+
+
+I will look at the correlations between RFFT and the other quantitative variables
+```{r}
+quantitative <- c("Age", "VAT", "BMI", "SBP", "DBP", "MAP", "eGFR", "Chol", "HDL", "FRS")
+round(cor(prevend$RFFT, prevend[,quantitative]), 2)
+```
+
+I am going to create a "full" model that has all of the quantitative variables as predictors
+```{r}
+lm.full.quant <- lm(prevend$RFFT ~ prevend$Age + prevend$VAT + prevend$BMI + prevend$SBP + prevend$DBP + prevend$MAP + prevend$eGFR + prevend$Chol + prevend$HDL + prevend$FRS)
+summary(lm.full.quant)
+```
+Backward elimination using AIC
+```{r}
+mybackAIC <- step(lm.full.quant, direction="backward", data=prevend)
+```
+This method results in a model that uses predictors BMI, DBP, Chol, MAP, SBP, FRS, VAT, and Age; the model removed HDL and eGFR
+
+
+Backward elimination using BIC
+```{r}
+n <-nrow(prevend)
+mybackBIC <- step(lm.full.quant, direction="backward", data=prevend, k=log(n))
+```
+
+This method results in a model that uses predictors SBP, Chol, MAP, DBP, VAT, FRS, and Age; the model removed HDL, eGFR, BMI, and DBP.
+
+Forward selection:
+```{r}
+my.int <- lm(RFFT~1, data=prevend)
+forwardAIC <- step(my.int, scope=list(lower= ~ 1, upper= lm.full.quant), 
+                   direction="forward", data=prevend)
+```
+This method results in a model that uses predictors Age, VAT, BMI, Chol, FRS, and SBP; the model removed MAP, DBP, eGFR, and HDL.
+
+Forward selection using BIC:
+```{r}
+forwardBIC <- step(my.int, scope=list(lower= ~ 1, upper= lm.full.quant), direction="forward", data=prevend, k=log(n))
+```
+This method results in a model that uses predictors Age, VAT, and BMI; the model removed Chol, FRS, SBP, MAP, DBP, eGFR, and HDL.
+
+To summarize:
+Backward elimination using AIC model is RFFT ~ Age + VAT + BMI + SBP + 
+  DBP + MAP + Chol + FRS with AIC of 2867.9
+
+Backward elimination using BIC model is RFFT ~ Age + VAT + SBP + DBP + 
+    MAP + Chol + FRS with AIC of 2902.57
+
+Forward selection is RFFT ~ Age + VAT + BMI + Chol + 
+   FRS + SBP with AIC of 2870.88
+
+Forward selection using BIc is RFFT ~ Age + VAT + BMI with AIC of 2891.9
+
+Now I will check $R^2_{ADJ}$ for each of these models
+```{r}
+lm.backAIC <- lm(RFFT ~ Age + VAT + BMI + SBP + DBP + MAP + Chol + FRS, data=prevend)
+summary(lm.backAIC)
+lm.backBIC <- lm(RFFT ~ Age + VAT + SBP + DBP + MAP + Chol + FRS, data=prevend)
+summary(lm.backBIC)
+lm.forward <- lm(RFFT ~ Age + VAT + BMI + Chol + FRS + SBP, data=prevend)
+summary(lm.forward)
+lm.forwardBIC <- lm(RFFT ~ Age + VAT + BMI, data=prevend)
+summary(lm.forwardBIC)
+```
+None of these models are very good, but the backward elimination using AIC model is the best of them, so I will proceed with that model.
+
+```{r}
+chosen_model <- lm(RFFT ~ Age + VAT + BMI + SBP + DBP + MAP + Chol + FRS, data=prevend)
+summary(chosen_model)
+AIC(chosen_model)
+```
+
+Now it is time to consider our categorical variables. 
+```{r}
+par(mfrow=c(3,3))
+plot(prevend$Gender, prevend$RFFT, xlab="Gender",ylab="RFFT")
+plot(prevend$Ethnicity, prevend$RFFT, xlab="Ethnicity",ylab="RFFT")
+plot(prevend$Education, prevend$RFFT, xlab="Education",ylab="RFFT")
+plot(prevend$CVD, prevend$RFFT, xlab="CVD",ylab="RFFT")
+plot(prevend$DM, prevend$RFFT, xlab="DM",ylab="RFFT")
+plot(prevend$Smoking, prevend$RFFT, xlab="Smoking",ylab="RFFT")
+plot(prevend$Hypertension, prevend$RFFT, xlab="Hypertension",ylab="RFFT")
+plot(prevend$Albuminuria, prevend$RFFT, xlab="Albuminuria",ylab="RFFT")
+plot(prevend$Statin, prevend$RFFT, xlab="Statin",ylab="RFFT")
+```
+
+We can see a clear difference in Education and Ethnicity, so I will try adding each of those to my model, one at a time
+```{r}
+chosen_model <- lm(RFFT ~ Age + VAT + BMI + SBP + DBP + MAP + Chol + FRS + Education, data=prevend)
+summary(chosen_model)
+AIC(chosen_model)
+```
+The model is better with Education, and BMI becomes less useful. I will now add Ethnicity and remove BMI
+
+```{r}
+chosen_model <- lm(RFFT ~ Age + VAT + SBP + DBP + MAP + Chol + FRS + Education + Ethnicity, data=prevend)
+summary(chosen_model)
+AIC(chosen_model)
+```
+The model improves, but not by much; ethnicity doesn't seem very helpful, but I'll leave it for now.  Because we are particularly interested in Statin, I will add that next.
+```{r}
+chosen_model <- lm(RFFT ~ Age + VAT + SBP + DBP + MAP + Chol + FRS + Education + Ethnicity + Statin, data=prevend)
+summary(chosen_model)
+AIC(chosen_model)
+```
+
+Again, the model improves slightly.  I will try adding DM now.
+```{r}
+chosen_model <- lm(RFFT ~ Age + VAT + SBP + DBP + MAP + Chol + FRS + Education + Ethnicity + Statin + DM, data=prevend)
+summary(chosen_model)
+AIC(chosen_model)
+```
+The model gets worse with DM.  I will remove DM and try adding CVD.
+```{r}
+chosen_model <- lm(RFFT ~ Age + VAT + SBP + DBP + MAP + Chol + FRS + Education + Ethnicity + Statin + CVD, data=prevend)
+summary(chosen_model)
+AIC(chosen_model)
+```
+
+The model improves very slightly.  Statin has become more significant.  I will try adding Smoking.
+```{r}
+chosen_model <- lm(RFFT ~ Age + VAT + SBP + DBP + MAP + Chol + FRS + Education + Ethnicity + Statin + CVD + Smoking, data=prevend)
+summary(chosen_model)
+AIC(chosen_model)
+```
+The model improves, and FRS becomes significantly less useful.  I will try adding Hypertension
+```{r}
+chosen_model <- lm(RFFT ~ Age + VAT + SBP + DBP + MAP + Chol + FRS + Education + Ethnicity + Statin + CVD + Smoking + Hypertension, data=prevend)
+summary(chosen_model)
+AIC(chosen_model)
+```
+The model improves very slightly.  I will try adding Albuminuria.
+```{r}
+chosen_model <- lm(RFFT ~ Age + VAT + SBP + DBP + MAP + Chol + FRS + Education + Ethnicity + Statin + CVD + Smoking + Hypertension + Albuminuria, data=prevend)
+summary(chosen_model)
+AIC(chosen_model)
+```
+
+The model gets worse.  I will remove Albuminuria and try adding gender.
+```{r}
+chosen_model <- lm(RFFT ~ Age + VAT + SBP + DBP + MAP + Chol + FRS + Education + Ethnicity + Statin + CVD + Smoking + Hypertension + Gender, data=prevend)
+summary(chosen_model)
+AIC(chosen_model)
+```
+
+The model stays about the same, I will not include gender.
+
+Out of curiosity, I will try my model building methods again but with all variables - with categorical variables as factors.
+```{r}
+lm.all <- lm(RFFT ~ ., data=prevend)
+summary(lm.all)
+AIC(lm.all)
+```
+Backward elimination using AIC - including categorical variables
+```{r}
+mybackAIC.catincl <- step(lm.all, direction="backward", data=prevend)
+```
+
+Backward elimination using BIC
+```{r}
+n <-nrow(prevend)
+mybackBIC.catincl <- step(lm.all, direction="backward", data=prevend, k=log(n))
+```
+
+Forward selection with categorical:
+```{r}
+my.int <- lm(RFFT~1, data=prevend)
+forwardAIC.catincl <- step(my.int, scope=list(lower= ~ 1, upper= lm.all), 
+                   direction="forward", data=prevend)
+```
+
+Forward selection using BIC:
+```{r}
+forwardBIC.catincl <- step(my.int, scope=list(lower= ~ 1, upper= lm.all), direction="forward", data=prevend, k=log(n))
+```
+
+
+
+
+```{r}
+#Back AIC with Categorical model
+lm.backAIC.catincl <- lm(RFFT ~ Age + Ethnicity + Education + VAT + CVD + Smoking + Hypertension + 
+    SBP + DBP + MAP + eGFR + Chol + Statin, data = prevend)
+summary(lm.backAIC.catincl)
+AIC(lm.backAIC.catincl)
+
+#Back with BIC with Categorical model
+lm.backBIC.catincl <- lm(RFFT ~ Age + Education + Smoking, data=prevend)
+summary(lm.backBIC.catincl)
+AIC(lm.backBIC.catincl)
+
+#Forward selection with categorical model:
+lm.forwardAIC.catincl <- lm(RFFT ~ Education + Age + Smoking + Ethnicity + VAT + Chol + Statin + 
+    BMI, data=prevend)
+summary(lm.forwardAIC.catincl)
+AIC(lm.forwardAIC.catincl)
+
+#Forward selection using BIC with categorical model:
+lm.forwardBIC.catincl <- lm(RFFT ~ Education + Age + Smoking, data=prevend)
+summary(lm.forwardBIC.catincl)
+AIC(lm.forwardBIC.catincl)
+```
+
+From everything I see, the best model is this: RFFT ~ Education + Age + Smoking + Ethnicity + VAT + Chol + Statin + BMI  
+$R^2_{ADJ}$ = 0.4559  
+AIC = 4068.22
+
+Not a great model...
+
+```{r}
+new_chosenmodel <- lm(RFFT ~ Education + Age + Smoking + Ethnicity + VAT + Chol + Statin + BMI, data=prevend)
+
+par(mfrow=c(1,3))
+plot(new_chosenmodel, c(1,2,4))
+```
+
+```{r}
+rsd <- resid(new_chosenmodel)
+plot(prevend$Age,rsd,xlab="Age",ylab="Residual")
+abline(a=0,b=0)
+plot(prevend$Ethnicity,rsd,xlab="Ethnicity",ylab="Residual")
+abline(a=0,b=0)
+plot(prevend$Education,rsd,xlab="Education",ylab="Residual")
+abline(a=0,b=0)
+plot(prevend$VAT,rsd,xlab="VAT",ylab="Residual")
+abline(a=0,b=0)
+plot(prevend$Smoking,rsd,xlab="Smoking",ylab="Residual")
+abline(a=0,b=0)
+plot(prevend$Chol,rsd,xlab="Chol",ylab="Residual")
+abline(a=0,b=0)
+plot(prevend$BMI,rsd,xlab="BMI",ylab="Residual")
+abline(a=0,b=0)
+plot(prevend$Statin,rsd,xlab="Statin",ylab="Residual")
+abline(a=0,b=0)
+```
+Plot of observed responses vs fitted responses
+```{r}
+ft <- fitted(new_chosenmodel)
+plot(ft,prevend$RFFT,xlab="Fitted",ylab="RFFT")
+```
+Not great
+
+Variance inflation factors
+```{r}
+library(car)
+vif(new_chosenmodel)
+```
+
