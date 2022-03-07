@@ -571,4 +571,46 @@ wls <- lm(best_formula, data=data, weights=1/est_var)
 summary(wls)
 plot(wls)
 ```
+### WLS Convergence loop
+```{r}
+get_weights <- function(model) {
+  abs_resid <- abs(model$residuals)
+  abs_resid_lm <- lm(abs_resid ~ model$fitted.values)
+  est_var <- resid_model$fitted.values^2
+  weights <- 1 / est_var
+  return(weights)
+}
+
+get_model_difference <- function(new_model, old_model) {
+  params <- tidy(old_model)
+  new_params <- tidy(new_model)
+  abs_coef_diff = abs(new_params$estimate - params$estimate)
+  abs_std_err_dff = abs(new_params$std.error - params$std.error)
+  tot_abs_diff <- sum(abs_coef_diff) + sum(abs_std_err_dff)
+
+  return(tot_abs_diff)
+}
+
+old_model <- lm(best_formula, data=data)
+model_diff <- 1000
+count <- 0
+old_weights <- 1
+while(count < 50 & model_diff > 1e-12) {
+  count <- count + 1
+  new_weights <- get_weights(old_model)
+  new_model <- lm(best_formula, data=data, weights=new_weights)  
+  model_diff <- get_model_difference(new_model, old_model)
+  old_model <- new_model
+  
+  weight_diff <- sum(abs(new_weights - old_weights))
+  old_weights <- new_weights
+  
+  print(count)
+  print(model_diff)
+  print(weight_diff)
+
+}
+
+summary(new_model)
+```
 
