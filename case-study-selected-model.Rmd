@@ -116,6 +116,7 @@ data <- select(data, -ethnicity, -casenr)
 
 # Modeling
 ## Full model
+**This model was NOT chosen as the final model, but included to help document the process.**
 Start with the full model and examine some of our assumptions
 ```{r full-model}
 # Fit the full model, get a summary, and make plots
@@ -134,6 +135,7 @@ I don't see any clear trends in the mean of the residuals which is a good sign. 
 ## Transformations
 
 ### Box Cox
+**The Box Cox or other transformations were NOT used in the chosen model, but this section is included for documentation.**
 Try transforming the response with a Box Cox transformation
 ```{r box-cox-transformation}
 boxCox(full_model)
@@ -159,6 +161,7 @@ model_perf <- track_model_perf(trans_full_model, 'Full Model Box Cox', model_per
 After examining the plots from the model with a sqrt transformation to the response variable, we had a hard time telling if the model made a noticeable difference. This transformation would also impact the interpretability of the model, and it was decided to not utilize the transformation.  
 
 ### Interactions
+**This model was NOT chosen for the final model, but was needed for feature selection**
 Add interactions to the model to determine the effect of those 
 ```{r model-interactions}
 # Get model with interactions
@@ -177,6 +180,8 @@ The $R^2_{mult}$ is high, but there are a lot of parameters so $R^2_{adj}$ is lo
 
 ## Feature Selection
 ### Forward AIC
+
+**This methodology was used to choose the final model.**
 
 Try adding variables one-at-a-time as they reduce the AIC metric. Here we define the algorithm to have a model that has at least `statin` and it can add any of the other variables as well as their interactions.
 ```{r interactions-forward-AIC}
