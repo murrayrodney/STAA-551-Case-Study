@@ -371,6 +371,12 @@ model_perf <- track_model_perf(forward_bic_inter, 'Interaction Model Forward BIC
 acf(forward_bic_inter$residuals)
 ```
 
+Do the extra parameters in the model found by AIC describe "significantly" more variance than what the BIC model does?
+```{r}
+anova(forward_bic_inter, forward_aic_inter)
+```
+Based on the F statistic and resulting p-value, yes the extra variance that we are able to explain is significant.
+
 ### Polynomial
 #### Forward AIC
 We will take the polynomial model that we fit above, and see what features are really needed. Notice that for our base model we will at a minimum include the statin use since that is a variable of influence that we are particularly interested in.
