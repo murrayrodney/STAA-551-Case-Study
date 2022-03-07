@@ -1,0 +1,339 @@
+---
+title: "Case Study"
+author: "Rodney Murray, Valerie Chavez, Tuul Purevjav, Lori Hernandez"
+date: "2/25/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r imports, include=FALSE}
+library(dplyr)
+library(ggplot2)
+library(GGally)
+library(tidyr)
+library(reshape)
+library(car)
+library(formula.tools)
+library(stringr)
+library(broom)
+library(tidyr)
+library(gtools)
+library(corrplot)
+```
+
+
+# Summary statistics
+
+Load the data and show the first few rows.
+```{r data-load}
+data <- read.csv('./data/Prevend_Sample.csv')
+names(data) <- tolower(names(data)) # Convert column names to lower case
+head(data)
+```
+
+## Missing Values
+
+Examine the data for missing variables
+```{r find-missing-values}
+# Check the number of values that are recorded as NA
+colSums(is.na(data)) 
+
+# Get a summary of the data
+summary(data) 
+
+# Calculate the number of potentially invalid values (<0)
+colSums(data < 0)
+```
+
+It appears that we have no explicity missing values. However, de do have some observations where `vat`, `smoking`, `hdl`, and/or `frs` are invalid. In this case we will drop any observations which have an invalid value and double check the number of observations we are left with.
+```{r drop-nas}
+data <- data %>% 
+  replace(data < 0, NA) %>% # Replace all of the invalid values with NA
+  drop_na() # Get rid of all of the rows with NA's
+
+nrow(data) # Check the number of rows that we are left with
+```
+
+It looks like if we drop all of the invalid values we will loose 42 observations. We have decided to move forward with this since it may be unlikely to materially effect our conclusions. After we choose our model, it would be good to revisit and only drop na's for the columns that we are using in our model
+
+Convert the categorical variables to factor type
+```{r make-factors}
+data <- mutate(data, 
+       gender = factor(gender),
+       ethnicity = factor(ethnicity),
+       education = factor(education),
+       cvd = factor(cvd),
+       dm = factor(dm),
+       smoking = factor(smoking),
+       hypertension = factor(hypertension),
+       albuminuria = factor(albuminuria),
+       statin = factor(statin)
+       )
+```
+
+
+## Distribution of prediction value and key values
+Because there are too many variables to generate pair plots that we can read, I will calculate the correlation between all numerical variables in the data and make a heatmap that we can analyze.
+
+```{r plot-correlations, warning=FALSE, message=FALSE}
+# Select numeric data, calculate correlation coefficients and plot them
+data_num <- select_if(data, is.numeric)
+corrs <- cor(data_num)
+corrplot(corrs)
+```
+
+We will now look at some pairs plots to understand the potential correlations between these values.
+```{r numerical-pair-plot}
+ggpairs(data_num)
+```
+
+Lets also look at some of the categorical variables 
+```{r categorical-box-plots, warning=FALSE}
+factor_data <- select_if(data, is.factor)
+factor_cols <- names(factor_data)
+plots <- 1:length(factor_cols)
+count = 0
+for (col in factor_cols) {
+  count <-  count +1
+  fig <- ggplot() + 
+    geom_boxplot(aes(x=data[[col]], y=data[['rfft']])) +
+    labs(x=col, y='RFFT')
+
+  show(fig)
+  plots[count] <- fig
+}
+```
+
+**After carefull evaluation of the data Valerie noticed that there are very few values for ethnicity that do not correspond to Western European, which lead us to the decision to remove this variable for consideration in the model. We also elementated `casenr` since it has no physical meaning in this study**
+
+```{r}
+data <- select(data, -ethnicity, -casenr)
+```
+
+
+# Modeling
+## Full model
+Start with the full model and examine some of our assumptions
+```{r full-model}
+# Fit the full model, get a summary, and make plots
+full_model <- lm(rfft ~ ., data=data)
+
+summary(full_model)
+
+ggplot() + geom_point(aes(x=data$rfft, y=full_model$fitted.values))
+plot(full_model) # Typical diagnostic plots
+plot(full_model, 4) # Just cooks distances as bar
+acf(full_model$residuals) # Looking for autocorrelation
+```
+
+I don't see any clear trends in the mean of the residuals which is a good sign. I am worried about the constant variance assumption, so we may look at some transformations or WLS. The variance seems to increase as the fitted values increase. The QQ plot shows that there is no reason to believe that the residuals are not normally distributed. The cooks distances for our data do not indicate any points that we should likely be concerned about.
+
+## Transformations
+
+### Box Cox
+Try transforming the response with a Box Cox transformation
+```{r box-cox-transformation}
+boxCox(full_model)
+```
+From the above it might make sense to try a square root transformation
+
+
+```{r plot-transformation}
+trans_data <- mutate(data, rfft_sqrt = sqrt(rfft))
+trans_numeric_data <- select_if(trans_data, is.numeric)
+ggpairs(trans_numeric_data, aes(alpha=0.5))
+```
+Hard to tell from this plot that it made any difference. We can quickly try the model
+
+```{r model-box-cox}
+trans_data <- select(trans_data, -rfft)
+trans_full_model <- lm(rfft_sqrt ~ ., data=trans_data)
+summary(trans_full_model)
+plot(trans_full_model)
+
+model_perf <- track_model_perf(trans_full_model, 'Full Model Box Cox', model_perf)
+```
+After examining the plots from the model with a sqrt transformation to the response variable, we had a hard time telling if the model made a noticeable difference. This transformation would also impact the interpretability of the model, and it was decided to not utilize the transformation.  
+
+### Interactions
+Add interactions to the model to determine the effect of those 
+```{r model-interactions}
+# Get model with interactions
+inter_model <- lm(rfft ~ .^2, data=data)
+
+# Get summary and metrics
+summary(inter_model)
+AIC(inter_model)
+BIC(inter_model)
+length(inter_model$coefficients)
+
+# Plot models
+plot(inter_model)
+```
+The $R^2_{mult}$ is high, but there are a lot of parameters so $R^2_{adj}$ is low as will be metrics like AIC and BIC will be high.
+
+## Feature Selection
+### Forward AIC
+
+Try adding variables one-at-a-time as they reduce the AIC metric. Here we define the algorithm to have a model that has at least `statin` and it can add any of the other variables as well as their interactions.
+```{r interactions-forward-AIC}
+# Define base model, scope and execute stepwise addition of variables
+base_model <- lm(rfft ~ statin, data=data) 
+scope <- list(lower=base_model, upper=inter_model)
+forward_aic_inter <- step(base_model, scope=scope, direction='forward', data=data, trace=0)
+
+# Analyze model and get metrics
+summary(forward_aic_inter)
+length(forward_aic_inter$coefficients)
+AIC(forward_aic_inter)
+BIC(forward_aic_inter)
+
+# Plot residuals
+plot(forward_aic_inter)
+plot(forward_aic_inter, 4)
+model_perf <- track_model_perf(forward_aic_inter, 'Interaction Model Forward AIC', model_perf)
+acf(forward_aic_inter$residuals)
+```
+
+### Forward BIC
+
+Do the same we did with AIC, but now BIC as the decision metric
+```{r interactions-forward-BIC}
+# Define base model, scope and execute stepwise addition of variables
+base_model <- lm(rfft ~ statin, data=data)
+scope <- list(lower=base_model, upper=inter_model)
+n <- nrow(data)
+forward_bic_inter <- step(base_model, scope=scope, direction='forward', data=data, trace=0, k=log(n))
+
+# Analyze model and get metrics
+summary(forward_bic_inter)
+length(forward_bic_inter$coefficients)
+AIC(forward_bic_inter)
+BIC(forward_bic_inter)
+
+# Plot residuals
+plot(forward_bic_inter)
+plot(forward_bic_inter, 4)
+model_perf <- track_model_perf(forward_bic_inter, 'Interaction Model Forward BIC', model_perf)
+acf(forward_bic_inter$residuals)
+```
+
+## WLS
+Attempt to address the issue of non-constant variance through Weighted Least Squares where we fit a linear model to describe the trend in variance of the residuals.
+
+```{r analyze-resid-vs-predictors}
+best_ols <- forward_aic_inter
+
+# use broom::augment to get information about the model to plot all of the predictors vs
+# the residuals with ggplot
+ols_results <- data.frame(augment(best_ols))
+cols <- names(ols_results)
+added_cols = cols[grepl('[.]',cols)]
+orig_cols <- cols[!grepl('[.]',cols)]
+
+# Reshape the data for plotting with ggplot
+ols_plot <- ols_results %>% 
+  melt(id.vars=added_cols) %>% 
+  mutate(value=as.double(value)) %>% 
+  filter(variable != 'rfft')
+
+# Plot the residuals vs. all of the predictors
+fig <- ggplot(ols_plot, aes(x=value, y=.resid)) +
+  facet_wrap(vars(variable), ncol=3, scales='free_x') +
+  geom_point(alpha=0.4)
+fig
+```
+
+Plot the correlations of the input data, and keep an eye out for potential multicollinearity problems
+```{r}
+best_input_data <- data %>% 
+  select(orig_cols) %>% 
+  select_if(is.numeric)
+
+input_corrs <- cor(best_input_data)
+corrplot(input_corrs)
+```
+
+
+```{r}
+# Define a function to get the weights for observations by fitting a linear model to the residuals 
+get_weights <- function(model) {
+  abs_resid <- abs(model$residuals)
+  abs_resid_lm <- lm(abs_resid ~ model$fitted.values)
+  est_var <- resid_model$fitted.values^2
+  weights <- 1 / est_var
+  return(weights)
+}
+
+# Calculate the difference for the coefficients and standard errors for the old and new model
+get_model_difference <- function(new_model, old_model) {
+  params <- tidy(old_model)
+  new_params <- tidy(new_model)
+  abs_coef_diff = abs(new_params$estimate - params$estimate)
+  abs_std_err_dff = abs(new_params$std.error - params$std.error)
+  tot_abs_diff <- sum(abs_coef_diff) + sum(abs_std_err_dff)
+
+  return(tot_abs_diff)
+}
+
+# Define our old model as our OLS model
+old_model <- lm(best_formula, data=data)
+
+count <- 0 # Setup a count so we don't get stuck in the while loop
+# dummy values to get into the while loop
+old_weights <- 1
+model_diff <- 1000
+
+while(count < 50 & model_diff > 1e-12) {
+  count <- count + 1 # Increment count by one so we don't get stuck
+  
+  # Calculate the weights and fit the model with them
+  new_weights <- get_weights(old_model)
+  new_model <- lm(best_formula, data=data, weights=new_weights)  
+  
+  # Calculate the differences between models and the weights
+  model_diff <- get_model_difference(new_model, old_model)
+  weight_diff <- sum(abs(new_weights - old_weights))
+  
+  # Set the old model as the current "new_model" so we can compare next time
+  old_model <- new_model
+  old_weights <- new_weights
+  
+  cat('Count:\t', count, '\nModel Params Diff:\t', model_diff, '\nWeight Diff:\t', weight_diff, '\n\n')
+}
+
+wls_model <- new_model # assign to a more meaningful variable.
+```
+
+I'm still not quite sure how this can converge completely in only two iterations..., but the results weren't terrible different in the first iteration.
+
+
+### Model Summary and ANOVA
+```{r}
+summary(wls_model)
+
+anova(wls_model)
+
+# Other metrics
+cat('AIC: ', AIC(wls_model), '\n')
+cat('BIC: ', BIC(wls_model))
+```
+
+### Model Plots
+```{r}
+# Standard model diagnostic plots
+plot(wls_model, 1:5)
+
+# Check for autocorrelation
+acf(wls_model$residuals)
+
+# Plot fitted vs. Observed Values
+fig <- ggplot() + 
+  geom_point(aes(x=data$rfft, y=wls_model$fitted.values), alpha=0.5) +
+  labs(x='Observed Values', y='Fitted Values')
+fig
+```
+
