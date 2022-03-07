@@ -1,0 +1,355 @@
+---
+title: "Case Study--All Vairables Treated Equally "
+author: "Tuul Purevjav"
+date: "3/2/2022"
+output: word_document
+---
+
+```{r}
+library(dplyr)
+library(tidyverse)
+library(GGally)
+library(car)
+```
+
+My analysis is treating all variables as equals (without giving special treatment to Statin).
+
+## Summary Statistics and Graphics
+
+```{r}
+prevend <- read.csv("Prevend_Sample.csv")
+```
+
+Check for NA's
+```{r}
+sum(is.na(prevend))
+```
+
+**Summary Statistics**
+```{r}
+summary(prevend)
+```
+
+Handling NA's:
+```{r}
+#replacing negative values in the 4 relevant columns with NA
+prevend$VAT <- replace(prevend$VAT, prevend$VAT < 0, NA)
+prevend$Smoking <- replace(prevend$Smoking, prevend$Smoking < 0, NA)
+prevend$HDL <- replace(prevend$HDL, prevend$HDL < 0, NA)
+prevend$FRS <- replace(prevend$FRS, prevend$FRS < 0, NA)
+
+#count the number of rows that have an NA value present
+sum(!complete.cases(prevend))
+```
+
+```{r}
+# This removes only 2 NA observations on my machine, not 42. Not sure why.
+prevend <-na.omit(prevend)
+dim(prevend)
+```
+
+```{r}
+# remove irrelevant variable `Casenr` from the data frame.
+prevend<- prevend[, -1]
+```
+
+**Analysis**
+
+I tried to plot a matrix of scatterplots with RFFT vs all variable, it was impossible to see any that made sense. So I removed categorical variables (since they're meaningless anyway) and created a plot of matrix only with RFFT and quantitative variables in the effort to get some sort of visual of their relationship.
+```{r}
+# create new dataframe dummy variables removed
+prevend.no.categ <- prevend[,-c(2,3,4,7,8,9,10,16)]
+ggpairs(prevend.no.categ)
+```
+
+```{r}
+# remove df prevend.no.categ
+rm(prevend.no.categ)
+```
+
+Check correlations for RFFT with all predictors:
+```{r}
+# create a matrix of correlations
+(cor <- round(cor(prevend[,-5]),2))
+
+# correlation between RFFT and other predictors
+round(cor(prevend$RFFT,prevend[,-5]),2)
+```
+Large correlations with RFFT: 
+  Age  -0.53, 
+  Education  0.57, 
+  FRS  -0.48
+Large correlations in general: 
+  Age/FRS 0.81, 
+  Hypertension/MAP  0.54, 
+  SBP/FRS 0.66, 
+  DBP/SBP 0.70, 
+  MAP/SBP 0.91, 
+  MAP/DBP 0.89,
+  FRS/Hypertension  0.63,
+  MAP/FRS 0.59
+
+
+**Starting with fitting the full model**
+
+```{r}
+m.full <- lm(RFFT ~ . ,data=prevend)
+summary(m.full)
+```
+Taken together, the predictors have Adjusted R-squared 0.4604, which is not that great.  Any of them whose p-value is not close to 0 might be OK to remove. Overall F-statistic is 22.16, which is big and overall p-value is < 2.2e-16f, which is small. 
+We have a discrepancy between small R-squared and small overall p-value. This may suggests some of the predictors could be strongly correlated (collinearity problem), which we already know they are (i.e., SBP, DBP and MAP are all blood pressure measurements).
+Looking at the variable-added-last test (P-value column), Age, Gender, Education, Smoking, Map, and Statin seem essential b/c their small p-values.
+
+Check the residual plots for the full model:
+```{r}
+par(mfrow=c(1,3))
+plot(m.full,c(1,2,4))
+```
+Residuals vs Fitted values: appears to have some fanning and might suggest non-constant variance.
+QQPlot: looks very straight, suggests that residuals are normal.
+Cook's distance: check obs 153, 375, and 481.
+
+
+Check plots of the residuals against each of quantitative predictors to examine the linearity of the model, mean zero and constant variance:
+```{r echo=FALSE, fig.height=12, fig.width=6}
+rsd <- resid(m.full)
+par(mfrow=c(10,2))
+par(mar=c(3.8, 4, 2, 0.5))
+plot(prevend$Age,rsd,xlab="Age",ylab="residual")
+abline(a=0,b=0)
+plot(prevend$Gender,rsd,xlab="Gender",ylab="residual")
+abline(a=0,b=0)
+plot(prevend$Ethnicity,rsd,xlab="Ethnicity",ylab="residual")
+abline(a=0,b=0)
+plot(prevend$Education,rsd,xlab="Education",ylab="residual")
+abline(a=0,b=0)
+plot(prevend$VAT,rsd,xlab="VAT",ylab="residual")
+abline(a=0,b=0)
+plot(prevend$CVD,rsd,xlab="CVD",ylab="residual")
+abline(a=0,b=0)
+plot(prevend$DM,rsd,xlab="DM",ylab="residual")
+abline(a=0,b=0)
+plot(prevend$Smoking,rsd,xlab="Smoking",ylab="residual")
+abline(a=0,b=0)
+plot(prevend$Hypertension,rsd,xlab="Hypertension",ylab="residual")
+abline(a=0,b=0)
+plot(prevend$BMI,rsd,xlab="BMI",ylab="residual")
+abline(a=0,b=0)
+plot(prevend$SBP,rsd,xlab="SBP",ylab="residual")
+abline(a=0,b=0)
+plot(prevend$DBP,rsd,xlab="DBP",ylab="residual")
+abline(a=0,b=0)
+plot(prevend$MAP,rsd,xlab="MAP",ylab="residual")
+abline(a=0,b=0)
+plot(prevend$eGFR,rsd,xlab="eGFR",ylab="residual")
+abline(a=0,b=0)
+plot(prevend$Albuminuria,rsd,xlab="Albuminuria",ylab="residual")
+abline(a=0,b=0)
+plot(prevend$Chol,rsd,xlab="Chol",ylab="residual")
+abline(a=0,b=0)
+plot(prevend$HDL,rsd,xlab="HDL",ylab="residual")
+abline(a=0,b=0)
+plot(prevend$Statin,rsd,xlab="Statin",ylab="residual")
+abline(a=0,b=0)
+plot(prevend$FRS,rsd,xlab="FRS",ylab="residual")
+abline(a=0,b=0)
+```
+Age looks good and VAT appears to have increasing variance to the right. BMI has cluttering on the left. Valerie pointed out that the distribution of Ethnicity was off.
+
+Check the distribution of Ethnicity
+```{r}
+plot(density(prevend$Ethnicity))
+```
+Like Valerie said, the plot shows most of the individuals were Western European (0 = Western European). We should remove it from the study.
+
+Check a density estimate of RFFT.
+```{r}
+plot(density(prevend$RFFT))
+```
+The symmetry is not great but reasonable.
+
+Check the plot of observed responses against fitted responses:
+```{r}
+ft <- fitted(m.full)
+plot(ft,prevend$RFFT,xlab="fitted",ylab="RFFT",main="RFFT vs Fitted")
+abline(a=0,b=1,col="red")
+```
+The straight line fit looks reasonable, and there could be some fanning out a little bit, which may suggest non-constant variance assumption not met? I could try transformation.
+
+**Let's check VIF.**
+
+Check collinearity using variance inflation factors (VIF):
+```{r}
+vif(m.full)
+```
+Age and DBP are larger than 5. SBP, MAP and FRS are larger than 10, which is not surprising. This suggests we are dealing with collinearity.
+
+**Let's consider transformation.**
+
+```{r}
+boxCox(m.full)
+```
+The closest “rounded” value for λ is 0.5, which corresponds to the square root transformation.
+
+Let's try transforming the response and the predictors simultaneously:
+```{r}
+sqrtRFFT <- sqrt(prevend$RFFT)
+sqrtAge <- sqrt(prevend$Age)
+sqrtGender <- sqrt(prevend$Gender)
+sqrtEthnicity <- sqrt(prevend$Ethnicity)
+sqrtEducation <- sqrt(prevend$Education)
+sqrtVAT <- sqrt(prevend$VAT)
+sqrtCVD <- sqrt(prevend$CVD)
+sqrtDM <- sqrt(prevend$DM)
+sqrtSmoking <- sqrt(prevend$Smoking)
+sqrtHypertension <- sqrt(prevend$Hypertension)
+sqrtBMI <- sqrt(prevend$BMI)
+sqrtSBP <- sqrt(prevend$SBP)
+sqrtDBP <- sqrt(prevend$DBP)
+sqrtMAP <- sqrt(prevend$MAP)
+sqrteGFR <- sqrt(prevend$eGFR)
+sqrtAlbuminuria <- sqrt(prevend$Albuminuria)
+sqrtChol <- sqrt(prevend$Chol)
+sqrtHDL <- sqrt(prevend$HDL)
+sqrtStatin <- sqrt(prevend$Statin)
+sqrtFRS <- sqrt(prevend$FRS)
+sqrt.prevend <- data.frame(sqrtRFFT,sqrtAge,sqrtGender,sqrtEthnicity,sqrtEducation,sqrtVAT,sqrtCVD,
+                                sqrtDM,sqrtSmoking,sqrtHypertension,sqrtBMI,sqrtSBP,
+                                sqrtDBP,sqrtMAP,sqrteGFR,sqrtAlbuminuria,sqrtChol,sqrtHDL,sqrtStatin,sqrtFRS)
+m.sqrt.full<- lm(sqrt.prevend$sqrtRFFT ~ ., data=sqrt.prevend)
+summary(m.sqrt.full)
+```
+
+```{r}
+summary(m.sqrt.full)
+```
+The Adjusted R-squared increased from 0.4604 to 0.4648. Not a big improvement.
+
+Let's compare the plot of observed values against fitted values for each of the models:
+```{r}
+par(mfrow=c(2,2))
+plot(ft,prevend$RFFT,xlab="fitted",ylab="RFFT",main="RFFT vs Fitted")
+abline(a=0,b=1,col="red")
+
+plot(m.sqrt.full$fitted.values,sqrtRFFT,xlab="Fitted vs sqrt(Y)")
+abline(a=0,b=1,col="red")
+```
+Sqrt model fits a little better, but I decided not to consider transformation. The original model is probably reasonably good enough to proceed.
+
+**Let's check AIC and BIC.**
+
+Backward AIC:
+```{r}
+backAIC <- step(m.full,direction="backward", data=prevend)
+```
+AIC backward result: RFFT ~ Age + Ethnicity + Education + VAT + CVD + Smoking + Hypertension + 
+    SBP + DBP + MAP + eGFR + Chol + Statin
+
+Backward BIC
+```{r}
+n <- nrow(prevend)
+backBIC <- step(m.full, direction="backward", data=prevend, k=log(n))
+```
+Backward BIC result: RFFT ~ Age + Education + Smoking
+
+Forward AIC:
+```{r}
+m.full.intercept <- lm(RFFT~1, data=prevend)
+forwardAIC <- step(m.full.intercept, scope=list(lower= ~ 1, upper= m.full),
+direction="forward", data=prevend)
+```
+Forward AIC result: RFFT ~ Education + Age + Smoking + Ethnicity + VAT + Chol + Statin + eGFR + BMI
+
+Forward BIC:
+```{r}
+forwardBIC <- step(m.full.intercept, scope=list(lower= ~ 1, upper= m.full), direction="forward",
+data=prevend, k=log(n))
+```
+Forward BIC Result: RFFT ~ Education + Age + Smoking
+
+Compare summaries of all selected models:
+```{r}
+# backward AIC
+m.backAIC <- lm(RFFT ~ Age + Ethnicity + Education + VAT + CVD + Smoking + Hypertension +SBP + DBP + MAP + eGFR + Chol + Statin)
+summary(m.backAIC)
+
+# backward BIC
+m.backBIC <- lm(RFFT ~ Age + Education + Smoking)
+summary(m.backBIC)
+
+# forward AIC
+m.forwardAIC <- lm(RFFT ~ Education + Age + Smoking + Ethnicity + VAT + Chol + Statin + eGFR + BMI)
+summary(m.forwardAIC)
+
+# forward BIC
+m.forwardBIC <- lm(RFFT ~ Education + Age + Smoking)
+summary(m.forwardBIC)
+```
+
+Based on the Adjusted R-squared values, these two models have the highest values:
+$R^2_{ADJ}$ =0.4622, RFFT ~ Age + Ethnicity + Education + VAT + CVD + Smoking + Hypertension + SBP + DBP + MAP + eGFR + Chol + Statin
+$R^2_{ADJ}$ =0.4585, RFFT ~ Education + Age + Smoking + Ethnicity + VAT + Chol + Statin + eGFR + BMI 
+
+Without considering interactions, I'd probably go with the model that is more parsimonious. 
+
+
+**Let's try interactions.**
+
+Interaction AIC:
+```{r}
+# interaction on backward AIC
+m.full.back.int.2 <- lm(RFFT ~ (Age + Ethnicity + Education + VAT + CVD + Smoking + Hypertension + 
+    SBP + DBP + MAP + eGFR + Chol + Statin)^2, data=prevend)
+backAIC.int.2 <- step(m.full.back.int.2, direction="backward", data=prevend)
+```
+
+Check summary of interaction on the backward AIC:
+```{r}
+m.backAIC.int.2 <- lm(RFFT ~ Age + Ethnicity + Education + VAT + CVD + Smoking + Hypertension + 
+    SBP + DBP + MAP + eGFR + Chol + Statin + Age:Ethnicity + 
+    Age:Education + Age:Smoking + Age:SBP + Age:MAP + Age:Chol + 
+    Age:Statin + Ethnicity:VAT + Ethnicity:Smoking + Ethnicity:Hypertension + 
+    Ethnicity:SBP + Ethnicity:DBP + Ethnicity:MAP + Ethnicity:eGFR + 
+    Ethnicity:Chol + Education:Smoking + Education:Hypertension + 
+    Education:SBP + VAT:SBP + CVD:Smoking + CVD:SBP + Smoking:SBP + 
+    Smoking:DBP + Smoking:eGFR + Hypertension:DBP + Hypertension:MAP + 
+    Hypertension:Chol + Hypertension:Statin + SBP:DBP + SBP:MAP + 
+    SBP:Statin + DBP:Chol)
+summary(m.backAIC.int.2)
+```
+The model with interaction does not look reasonable, too long.
+$R^2_{ADJ}$ = 0.5176 
+
+```{r}
+# interaction on forward AIC
+m.full.forw.int.2 <- lm(RFFT ~ (Education + Age + Smoking + Ethnicity + VAT + Chol + Statin + eGFR + BMI)^2, data=prevend)
+forwardAIC.int.2 <- step(m.full.intercept, scope=list(lower= ~ 1, upper= m.full.forw.int.2),
+direction="forward", data=prevend)
+```
+result: RFFT ~ Education + Age + Smoking + Statin + Chol + Ethnicity + 
+    eGFR + VAT + Education:Age + Education:Smoking + Ethnicity:eGFR + 
+    Education:VAT
+
+Check summary of interaction on the forward AIC:
+```{r}
+m.forwAIC.int.2 <- lm(RFFT ~ Education + Age + Smoking + Statin + Chol + Ethnicity + 
+    eGFR + VAT + Education:Age + Education:Smoking + Ethnicity:eGFR + 
+    Education:VAT)
+summary(m.forwAIC.int.2)
+```
+$R^2_{ADJ}$ =0.4732. This is a little bit of improvement on $R^2_{ADJ}$. I would go with this model if we consider interaction.
+ 
+I'm not checking numbers for interactions with BIC because BIC tends to penalize heavily on the number of parameters in general.
+
+**Results**
+
+Based on the above analysis, I would choose the following models:
+RFFT ~ Education + Age + Smoking + Ethnicity + VAT + Chol + Statin + eGFR + BMI with $R^2_{ADJ}$ =0.4585
+RFFT ~ Education + Age + Smoking + Statin + Chol + Ethnicity + 
+    eGFR + VAT + Education:Age + Education:Smoking + Ethnicity:eGFR + 
+    Education:VAT, with $R^2_{ADJ}$ =0.4732.
+
+
+
+
+
