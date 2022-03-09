@@ -115,11 +115,9 @@ ggplot(corrs, aes(var1, variable, fill=value)) +
   geom_blank()
 ```
 
-It appears that our highest correlations with RFFT are with 
-  * `chol` 
-  * `egfr`
-  * `hld`
-  * `vat`
+It appears that our highest correlations for numerical variables and RFFT are with 
+  * `Age` 
+  * `FRS`
   
 We will now look at some pairs plots to understand the potential correlations between these values.
 ```{r numerical-pair-plot}
