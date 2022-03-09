@@ -268,7 +268,7 @@ inter_model <- lm(rfft ~ .^2, data=data)
 summary(inter_model)
 length(inter_model$coefficients)
 plot(inter_model)
-model_perf <- track_model_perf(inter_model, 'Full Model Interactions', model_perf)
+model_perf <- track_model_perf(inter_model, 'Interactions', model_perf)
 ```
 Wow, that is a big model with > 200 coefficients! Certainly not something that we would want to keep, the R^2 is better but our adjusted R^2 is only marginally better and the AIC/BIC are worse since we have so many parameters. Can we get something that captures more variance, but with fewer parameters?
 ```{r interactions-metrics}
@@ -304,7 +304,7 @@ summary(poly_model)
 length(poly_model$coefficients)
 plot(poly_model)
 
-model_perf <- track_model_perf(poly_model, 'Full Model Polynomials', model_perf)
+model_perf <- track_model_perf(poly_model, 'Polys', model_perf)
 ```
 
 ## Feature Selection
@@ -319,7 +319,7 @@ forward_aic <- step(base_model, scope=scope, direction='forward', data=data, tra
 # Analyze model
 summary(forward_aic)
 plot(forward_aic)
-model_perf <- track_model_perf(forward_aic, 'Full Model Forward AIC', model_perf)
+model_perf <- track_model_perf(forward_aic, 'Full Forward AIC', model_perf)
 ```
 
 
@@ -333,7 +333,7 @@ backward_aic <- step(full_model, scope=scope, direction='backward', data=data, t
 # Analyze model
 summary(backward_aic)
 plot(backward_aic)
-model_perf <- track_model_perf(backward_aic, 'Full Model Backward AIC', model_perf)
+model_perf <- track_model_perf(backward_aic, 'Full Backward AIC', model_perf)
 ```
 
 ### Interactions
@@ -350,7 +350,7 @@ length(forward_aic_inter$coefficients)
 AIC(forward_aic_inter)
 plot(forward_aic_inter)
 plot(forward_aic_inter, 4)
-model_perf <- track_model_perf(forward_aic_inter, 'Interaction Model Forward AIC', model_perf)
+model_perf <- track_model_perf(forward_aic_inter, 'Interactions Forward AIC', model_perf)
 acf(forward_aic_inter$residuals)
 ```
 #### Forward BIC
@@ -367,7 +367,7 @@ length(forward_bic_inter$coefficients)
 AIC(forward_bic_inter)
 plot(forward_bic_inter)
 plot(forward_bic_inter, 4)
-model_perf <- track_model_perf(forward_bic_inter, 'Interaction Model Forward BIC', model_perf)
+model_perf <- track_model_perf(forward_bic_inter, 'Interactions Forward BIC', model_perf)
 acf(forward_bic_inter$residuals)
 ```
 
@@ -389,7 +389,7 @@ forward_aic_poly <- step(base_model, scope=scope, direction='forward', data=data
 # Analyze model
 summary(forward_aic_poly)
 plot(forward_aic_poly)
-model_perf <- track_model_perf(forward_aic_poly, 'Polynomial Model Forward AIC', model_perf)
+model_perf <- track_model_perf(forward_aic_poly, 'Poly Forward AIC', model_perf)
 ```
 
 
@@ -399,7 +399,7 @@ base_model <- lm(rfft ~ statin, data=data)
 scope <- list(lower=base_model, upper=poly_model)
 backward_aic_poly <- step(poly_model, scope=scope, direction='backward', data=data, trace=0)
 summary(backward_aic_poly)
-model_perf <- track_model_perf(backward_aic_poly, 'Polynomial Model Backward AIC', model_perf)
+model_perf <- track_model_perf(backward_aic_poly, 'Polys Backward AIC', model_perf)
 ```
 
 ### Analyze model performance
@@ -407,9 +407,8 @@ We made some observations above, but it may be easier to compare everything here
 
 ```{r model-performance}
 model_perf <- arrange(model_perf, AIC)
-plot_model_perf <- filter(model_perf, !model_name %in% c('Full Model Box Cox', 'Full Model Interactions'))
+plot_model_perf <- filter(model_perf, !model_name %in% c('Full Model Box Cox', 'Interactions'))
 select(plot_model_perf, model_name, adj.r.squared, AIC)
-
 
 
 fig <- ggplot(plot_model_perf, aes(y=model_name, x=AIC)) + 
@@ -418,10 +417,11 @@ fig <- ggplot(plot_model_perf, aes(y=model_name, x=AIC)) +
   geom_blank()
 fig
 
-fig <- ggplot(plot_model_perf, aes(x=adj.r.squared, y=AIC, label=model_name)) +
-  geom_point(size=5, alpha=0.6, color='cornflowerblue') +
-  geom_text(nudge_y = 1, check_overlap=TRUE) +
-  xlim(0.445, 0.51) +
+
+fig <- ggplot(plot_model_perf, aes(x=adj.r.squared, y=AIC, color=model_name, label=model_name)) +
+  geom_point(size=5, alpha=0.6) +
+  geom_text(nudge_y = 1.5, check_overlap=TRUE) +
+  xlim(0.445, 0.48) +
   labs(x=expression(Radj^2), y='AIC')
 fig
 ```
