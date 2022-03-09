@@ -5,3 +5,7 @@
 *.Rproj
 case-study-investigation_files/figure-latex/*.pdf
 .DS_Store
+*.pdf
+*.html
+*_files/
+!Case-Study_Instructions.pdf
