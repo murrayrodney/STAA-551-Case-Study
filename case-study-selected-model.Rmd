@@ -160,7 +160,7 @@ model_perf <- track_model_perf(trans_full_model, 'Full Model Box Cox', model_per
 ```
 After examining the plots from the model with a sqrt transformation to the response variable, we had a hard time telling if the model made a noticeable difference. This transformation would also impact the interpretability of the model, and it was decided to not utilize the transformation.  
 
-```{r box-cox-resid-compare, fig.width=4, fig.height=1.75}
+```{r box-cox-resid-compare, fig.width=3, fig.height=1.25}
 df_full <- augment(full_model)
 df_boxcox <- augment(trans_full_model)
 
@@ -329,6 +329,25 @@ while(count < 50 & model_diff > 1e-12) {
 
 wls_model <- new_model # assign to a more meaningful variable.
 ```
+```{r, fig.width=3, fig.height=1.5}
+# Plot resid model and absolute values of residuals
+fitted_vals <- wls_model$fitted.values
+abs_resid <- abs(wls_model$residuals)
+resid_model <- lm(abs_resid ~ fitted_vals)
+fig <- ggplot() +
+  geom_point(aes(x=fitted_vals, 
+                 y=abs_resid),
+             alpha=0.5) +
+  geom_abline(
+    slope=resid_model$coefficients['fitted_vals'],
+    intercept=resid_model$coefficients['(Intercept)'],
+    color='red'
+  ) +
+  labs(x='Fitted Values', y='Absolute Residuals', title='Residual Model')
+             
+fig
+```
+
 
 I'm still not quite sure how this can converge completely in only two iterations..., but the results weren't terrible different in the first iteration.
 
