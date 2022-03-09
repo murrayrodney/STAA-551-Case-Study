@@ -405,7 +405,7 @@ model_perf <- track_model_perf(backward_aic_poly, 'Polys Backward AIC', model_pe
 ### Analyze model performance
 We made some observations above, but it may be easier to compare everything here
 
-```{r model-performance}
+```{r model-performance, fig.withh=4, fig.height=2}
 model_perf <- arrange(model_perf, AIC)
 plot_model_perf <- filter(model_perf, !model_name %in% c('Full Model Box Cox', 'Interactions'))
 select(plot_model_perf, model_name, adj.r.squared, AIC)
