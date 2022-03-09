@@ -368,11 +368,20 @@ $$
 RFFT = 67.5 + 6.16 Statin + b_E Education - 0.868 Age - 9.15 Smoking_1 + 1.73 Chol + 0.139 EGFR - 2.51 VAT \\
   + b_{ES} Smoking_1 + b_{EA} Age + Age * VAT \\
   \begin{cases}
+  b_E = 0.00,\ b_{ES}=0.00,\quad  b_{EA}=0.00 \quad \  \text{ if } Education = 0\\
   b_E = 24.4,\ b_{ES}=2.27,\quad  b_{EA}=-0.211 \text{ if } Education = 1\\
   b_E = 70.0,\ b_{ES}=-5.91,\  b_{EA}=-0.789 \text{ if } Education = 2\\
   b_E = 80.6,\ b_{ES}=15.5,\quad  b_{EA}=-0.843 \text{ if } Education = 3\\
   \end{cases}
 $$
+```{r}
+anova_result <- anova(wls_model)
+tidy(anova_result)
+```
+```{r}
+tidy(summary(wls_model))
+data.frame(confint(wls_model))
+```
 
 
 ### Model Plots
