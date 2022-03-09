@@ -138,7 +138,7 @@ I don't see any clear trends in the mean of the residuals which is a good sign. 
 **The Box Cox or other transformations were NOT used in the chosen model, but this section is included for documentation.**
 Try transforming the response with a Box Cox transformation
 ```{r box-cox-transformation}
-boxCox(full_model)
+bc <- boxCox(full_model, plotit=TRUE, xlim=c(0.3, 0.8))
 ```
 From the above it might make sense to try a square root transformation
 
@@ -159,6 +159,23 @@ plot(trans_full_model)
 model_perf <- track_model_perf(trans_full_model, 'Full Model Box Cox', model_perf)
 ```
 After examining the plots from the model with a sqrt transformation to the response variable, we had a hard time telling if the model made a noticeable difference. This transformation would also impact the interpretability of the model, and it was decided to not utilize the transformation.  
+
+```{r box-cox-resid-compare, fig.width=4, fig.height=1.75}
+df_full <- augment(full_model)
+df_boxcox <- augment(trans_full_model)
+
+df_full$model_name = 'Full Model'
+df_boxcox$model_name = 'Box Cox Model'
+
+df <- bind_rows(df_full, df_boxcox)
+
+fig <- ggplot(df, aes(x=.fitted, y=.resid)) +
+  facet_wrap(vars(model_name), scale='free') + 
+  geom_point(alpha=0.5) +
+  labs(x='Fitted Values', y='Residuals', title='Comparison of Default Full Model and Box Cox Transformation')
+fig
+```
+
 
 ### Interactions
 **This model was NOT chosen for the final model, but was needed for feature selection**
