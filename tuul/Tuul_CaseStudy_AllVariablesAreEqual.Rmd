@@ -17,7 +17,7 @@ My analysis is treating all variables as equals (without giving special treatmen
 ## Summary Statistics and Graphics
 
 ```{r}
-prevend <- read.csv("Prevend_Sample.csv")
+prevend <- read.csv("../data/Prevend_Sample.csv")
 ```
 
 Check for NA's
@@ -270,19 +270,19 @@ Forward BIC Result: RFFT ~ Education + Age + Smoking
 Compare summaries of all selected models:
 ```{r}
 # backward AIC
-m.backAIC <- lm(RFFT ~ Age + Ethnicity + Education + VAT + CVD + Smoking + Hypertension +SBP + DBP + MAP + eGFR + Chol + Statin)
+m.backAIC <- lm(RFFT ~ Age + Ethnicity + Education + VAT + CVD + Smoking + Hypertension +SBP + DBP + MAP + eGFR + Chol + Statin, data=prevend)
 summary(m.backAIC)
 
 # backward BIC
-m.backBIC <- lm(RFFT ~ Age + Education + Smoking)
+m.backBIC <- lm(RFFT ~ Age + Education + Smoking, data=prevend)
 summary(m.backBIC)
 
 # forward AIC
-m.forwardAIC <- lm(RFFT ~ Education + Age + Smoking + Ethnicity + VAT + Chol + Statin + eGFR + BMI)
+m.forwardAIC <- lm(RFFT ~ Education + Age + Smoking + Ethnicity + VAT + Chol + Statin + eGFR + BMI, data=prevend)
 summary(m.forwardAIC)
 
 # forward BIC
-m.forwardBIC <- lm(RFFT ~ Education + Age + Smoking)
+m.forwardBIC <- lm(RFFT ~ Education + Age + Smoking, data=prevend)
 summary(m.forwardBIC)
 ```
 
@@ -314,7 +314,7 @@ m.backAIC.int.2 <- lm(RFFT ~ Age + Ethnicity + Education + VAT + CVD + Smoking +
     Education:SBP + VAT:SBP + CVD:Smoking + CVD:SBP + Smoking:SBP + 
     Smoking:DBP + Smoking:eGFR + Hypertension:DBP + Hypertension:MAP + 
     Hypertension:Chol + Hypertension:Statin + SBP:DBP + SBP:MAP + 
-    SBP:Statin + DBP:Chol)
+    SBP:Statin + DBP:Chol, data=prevend)
 summary(m.backAIC.int.2)
 ```
 The model with interaction does not look reasonable, too long.
@@ -334,7 +334,7 @@ Check summary of interaction on the forward AIC:
 ```{r}
 m.forwAIC.int.2 <- lm(RFFT ~ Education + Age + Smoking + Statin + Chol + Ethnicity + 
     eGFR + VAT + Education:Age + Education:Smoking + Ethnicity:eGFR + 
-    Education:VAT)
+    Education:VAT, data=prevend)
 summary(m.forwAIC.int.2)
 ```
 $R^2_{ADJ}$ =0.4732. This is a little bit of improvement on $R^2_{ADJ}$. I would go with this model if we consider interaction.
