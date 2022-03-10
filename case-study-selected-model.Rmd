@@ -2,14 +2,14 @@
 title: "Case Study"
 author: "Rodney Murray, Valerie Chavez, Tuul Purevjav, Lori Hernandez"
 date: "2/25/2022"
-output: html_document
+output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r imports, include=FALSE}
+```{r imports, message=FALSE}
 library(dplyr)
 library(ggplot2)
 library(GGally)
@@ -22,6 +22,27 @@ library(broom)
 library(tidyr)
 library(gtools)
 library(corrplot)
+```
+
+```{r}
+# Model tracking function that is used later
+track_model_perf <- function(model, new_model_name, prev_model_perf=NULL, add_formula=TRUE) {
+  sum_obj <- summary(model)
+  new_formula <- toString(sum_obj$terms)
+  
+  model_perf <- glance(model)
+  model_perf$formula = new_formula
+  if (add_formula) {model_perf$model_name = new_model_name}
+  
+  if (!is.null(prev_model_perf)) {
+    prev_model_perf <- filter(prev_model_perf, model_name != new_model_name)
+    model_perf <-  bind_rows(prev_model_perf, model_perf)
+    
+  }
+  
+  return(model_perf)
+}
+model_perf <- data.frame()
 ```
 
 
@@ -128,6 +149,7 @@ ggplot() + geom_point(aes(x=data$rfft, y=full_model$fitted.values))
 plot(full_model) # Typical diagnostic plots
 plot(full_model, 4) # Just cooks distances as bar
 acf(full_model$residuals) # Looking for autocorrelation
+model_perf <- track_model_perf(full_model, 'Full Model Box Cox')
 ```
 
 I don't see any clear trends in the mean of the residuals which is a good sign. I am worried about the constant variance assumption, so we may look at some transformations or WLS. The variance seems to increase as the fitted values increase. The QQ plot shows that there is no reason to believe that the residuals are not normally distributed. The cooks distances for our data do not indicate any points that we should likely be concerned about.
@@ -248,6 +270,7 @@ Attempt to address the issue of non-constant variance through Weighted Least Squ
 
 ```{r analyze-resid-vs-predictors}
 best_ols <- forward_aic_inter
+best_formula <- best_ols$call$formula
 
 # use broom::augment to get information about the model to plot all of the predictors vs
 # the residuals with ggplot
@@ -270,7 +293,7 @@ fig
 ```
 
 Plot the correlations of the input data, and keep an eye out for potential multicollinearity problems
-```{r}
+```{r corr-plot-best-input}
 best_input_data <- data %>% 
   select(orig_cols) %>% 
   select_if(is.numeric)
@@ -285,7 +308,7 @@ corrplot(input_corrs)
 get_weights <- function(model) {
   abs_resid <- abs(model$residuals)
   abs_resid_lm <- lm(abs_resid ~ model$fitted.values)
-  est_var <- resid_model$fitted.values^2
+  est_var <- abs_resid_lm$fitted.values^2
   weights <- 1 / est_var
   return(weights)
 }
@@ -309,7 +332,7 @@ count <- 0 # Setup a count so we don't get stuck in the while loop
 old_weights <- 1
 model_diff <- 1000
 
-while(count < 50 & model_diff > 1e-12) {
+while(count < 50 & model_diff > 1e-3) {
   count <- count + 1 # Increment count by one so we don't get stuck
   
   # Calculate the weights and fit the model with them
@@ -329,6 +352,7 @@ while(count < 50 & model_diff > 1e-12) {
 
 wls_model <- new_model # assign to a more meaningful variable.
 ```
+
 ```{r, fig.width=3, fig.height=1.5}
 # Plot resid model and absolute values of residuals
 fitted_vals <- wls_model$fitted.values
@@ -343,14 +367,10 @@ fig <- ggplot() +
     intercept=resid_model$coefficients['(Intercept)'],
     color='red'
   ) +
-  labs(x='Fitted Values', y='Absolute Residuals', title='Residual Model')
+  labs(x='Fitted Values', y='Absolute Residuals', title='Residual Model for WLS')
              
 fig
 ```
-
-
-I'm still not quite sure how this can converge completely in only two iterations..., but the results weren't terrible different in the first iteration.
-
 
 ### Model Summary and ANOVA
 ```{r}
