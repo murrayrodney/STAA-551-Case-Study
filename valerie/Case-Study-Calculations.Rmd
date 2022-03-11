@@ -1,0 +1,417 @@
+---
+title: "Case Study"
+author: "Valerie Chavez"
+date: "3/3/2022"
+output: html_document
+---
+
+Summary Statistics and Graphics (4 points)
+• Do this before formal model fitting.
+• Include information on data cleaning/restructuring.
+
+```{r}
+#Data Cleaning and Restructuring
+
+Prevend<-read.csv("Prevend_Sample.csv")
+
+head(Prevend)
+dim(Prevend)
+colSums(is.na(Prevend))
+
+#Based on this sum there appears to be no N/A's but we need to make sure the entries are valid. 
+
+```
+
+
+```{r}
+
+range(Prevend)
+
+#Ranges for each column to help identify if any values are out of range
+#summary(Prevend)
+
+#vat has at least one negative, #smoking has a negative, HDL and FRS have negatives 
+
+```
+
+Removing negatives from the data
+
+```{r}
+#replacing negatives with NAs
+Prevend2<-Prevend
+Prevend2[Prevend2<0]<-NA
+head(Prevend2)
+
+Prevend2<-na.omit(Prevend2)
+head(Prevend2)
+
+
+```
+
+
+```{r}
+#Summary Statistics and Graphics
+
+#colMeans(Prevend2)
+#summary(Prevend2)
+#dim (Prevend2)
+#We took out 42 data points
+
+#Remove case#  from the data the box plot and regression
+Prevend3<-Prevend2[-c(1)]
+head(Prevend3)
+boxplot(Prevend3)
+
+```
+
+```{r}
+prevend2corset<-Prevend2[-c(1)]
+corsPrevend<-cor(prevend2corset)
+corrplot(corsPrevend)
+#corsPrevend
+
+```
+
+
+Analysis (5 points)
+• Description/discussion of analysis with enough detail that someone else could recreate your results.
+• You are encouraged to try different approaches, but please restrict yourselves to the least squares
+methods we have covered in this class (no other methods, such as loess or splines, should be used).
+• Justify any choices that you made as part of the analysis.
+• Discuss model assumptions and include diagnostic checks (plots and quantitative checks).
+• As you are working toward a final model, keep in mind all that we have covered (chhecking model
+assumptions, transformations, WLS, GLS, influential observations, collinearity, etc).
+
+
+```{r}
+#We have some variables that are measuring the same thing (3 measures of blood pressure, two measures of cholesterol)
+
+#MAP is calculated us DBP and SBP, so it make make sense to use it, Chol total includes HDL, so it would make sense to use these. But I am going to check 
+
+
+#Taking out just the quantitative variables
+Prevend3_Quant<-Prevend3[-c(2,3,4,7,8,9,10,16,19)]
+
+#head(Prevend3_Quant)
+
+
+#looking at eigenvalues to detects singularity
+
+colones<-rep(1, times=458)
+x<-cbind(colones,Prevend3_Quant$SBP,Prevend3_Quant$DBP,Prevend3_Quant$MAP)
+eigens_bp<-eigen(t(x)%*%x)$values
+
+eigens_bp
+
+cond.number<-sqrt(eigens_bp[1]/eigens_bp[4])
+cond.number
+
+
+#same for cholesterol
+y<-cbind(colones, Prevend3_Quant$Chol, Prevend3_Quant$HDL)
+
+eigens_chol<-eigen(t(y)%*%y)$values
+
+eigens_chol
+
+cond.number<-sqrt(eigens_chol[1]/eigens_chol[3])
+cond.number
+#not as obviously a collinearity, these might be different because, I think there is a 'give and take' with good/bad cholesterol, so we can leave both in
+```
+
+
+```{r}
+lm.chol<-lm(RFFT~MAP+SBP+DBP,data=Prevend3)
+summary(lm.chol)
+anova(lm.chol)
+
+lm2.chol<-lm(RFFT~MAP+DBP,data=Prevend3)
+
+summary(lm2.chol)
+anova(lm2.chol)
+
+lm3.chol<-lm(RFFT~MAP,data=Prevend3)
+summary(lm3.chol)
+anova(lm3.chol)
+
+
+
+```
+
+
+```{r}
+n<-nrow(Prevend3_Quant)
+backAICchol<-step(lm.chol, arg="back",data=Prevend3_Quant)
+
+#back BIC
+backBICchol<-step(lm.chol, arg="back",data=Prevend3_Quant,k=log(n))
+
+
+#both models seem to want MAP and DBP but the above R^2 weren't too great
+```
+
+
+I'm going to experiment with using MAP and not DBP or SBP because MAP was highly correlated with both (makes sense as they both are used to calculate MAP)
+
+```{r}
+Prevend3_Quant2<-Prevend3_Quant[-c(5,6)]
+
+head(Prevend3_Quant2)
+
+lm.full.quant<-lm(RFFT~., data=Prevend3_Quant2)
+
+summary(lm.full.quant)
+
+backAICfull<-step(lm.full.quant,arg = backwards, data=Prevend3_Quant2)
+
+
+
+```
+```{r}
+#Look at any singularities 
+X<-cbind(colones,Prevend3_Quant2)
+eigenquant<-eigen(t(X)%*%X)
+eigensquant$values
+```
+
+
+```{r}
+lm.backaicfull<-lm(RFFT ~ Age + VAT + BMI + Chol + FRS, data=Prevend3_Quant2)
+
+summary(lm.backaicfull)
+```
+
+```{r}
+#back BIC full
+backBICfull<-step(lm.full.quant,arg = backwards, data=Prevend3_Quant2,k=log(n))
+
+```
+```{r}
+lm.backbicfull<-lm(RFFT ~ Age + VAT + Chol + FRS, data=Prevend3_Quant2)
+
+summary(lm.backbicfull)
+```
+
+
+Adding in categoricals 
+```{r}
+
+
+categorical <- c("Gender", "Ethnicity", "Education", "CVD", "DM", "Smoking", "Hypertension", "Albuminuria", "Statin")
+Prevend3 [, categorical] <- lapply(Prevend3[, categorical], factor)
+str(Prevend3)
+
+
+
+
+
+```
+
+Leaving out the two other blood pressures
+
+```{r}
+PrevendQuantCat<-Prevend3[-c(12,13)]
+head(PrevendQuantCat)
+
+```
+
+Starting with our limited model+categoricals
+```{r}
+
+#Age + VAT + BMI + Chol + FRS 
+
+
+
+
+lm.limitedcat<-lm(RFFT~ Age + VAT + BMI + Chol + FRS +Gender+Ethnicity+Education+CVD+DM+Smoking+Hypertension+Albuminuria+Statin,data=PrevendQuantCat)
+
+
+summary(lm.limitedcat)
+
+```
+
+```{r}
+#Back AIC
+
+step(lm.limitedcat,arg = backwards, data=PrevendQuantCat)
+
+
+```
+
+
+```{r}
+summary(lm(RFFT ~ Age + VAT + Chol + FRS + Gender + Ethnicity + Education + 
+    CVD + Smoking + Hypertension + Statin, data=PrevendQuantCat))
+```
+
+
+```{r}
+step(lm.limitedcat, arg = backwards, data=PrevendQuantCat,k=log(n))
+```
+
+
+
+```{r}
+summary(lm(RFFT ~ Age + Education, data=PrevendQuantCat))
+```
+
+```{r}
+summary(lm(RFFT ~ Age + Education+Statin, data=PrevendQuantCat))
+```
+
+
+
+Initially in our AIC we got the quantitative variables 
+Age + VAT + BMI + Chol + FRS 
+
+Now we got either: 
+formula = RFFT ~ Age + VAT + Chol + FRS + Gender + Ethnicity + 
+    Education + CVD + Smoking + Hypertension + Statin
+ adjusted R^2=0.4568
+    or
+RFFT ~ Age + Education
+ adjusted R^2=0.4347
+    
+    
+Let's try LM_full    
+    
+```{r}
+lm.full<-lm(RFFT~.,data=PrevendQuantCat)
+
+summary(lm.full)
+```
+
+ACI_back
+```{r}
+step(lm.full, arg="backwards", data=PrevendQuantCat)
+```
+
+```{r}
+summary(lm(RFFT ~ Age + Gender + Ethnicity + Education + VAT + 
+    CVD + Smoking + Hypertension + MAP + Chol + HDL + Statin, data=PrevendQuantCat))
+```
+
+```{r}
+step(lm.full, arg="backwards", data=PrevendQuantCat,k=log(n))
+
+```
+
+```{r}
+summary(lm(RFFT ~ Age + Education + Smoking, data=PrevendQuantCat))
+```
+
+
+It seems like our selection looking at the limited Quantitative variables gives a very similar selection as the full model but the full model includes Albuminuria (using AIC)
+
+In both cased BIC picked age+education, with the additional categorical of smoking in the full model
+
+```{r}
+summary(lm(RFFT ~ Age + Education + Smoking+Statin, data=PrevendQuantCat))
+```
+
+
+```{r}
+corqaunts<-cor(Prevend3_Quant2)
+
+corrplot(corqaunts)
+
+#FRS and age seem to be highly correlated, makes sense as this is a measure of congnitive function
+
+```
+```{r}
+
+#taking out only the ones wanted in the models
+Prevend4<-PrevendQuantCat[-c(8,11,13,14,16,18)]
+ggpairs(Prevend4[c("Age","RFFT","Gender","Ethnicity","Education")])
+pairs(Prevend4[c("Age","RFFT","Gender","Ethnicity","Education")])
+#It looks like Ethnicity does not have an even spread 
+```
+```{r}
+summary(Prevend4$Ethnicity)
+
+#I am going to throw out ehtnicity because we have so few 1s and 2's relatively speaking 
+
+summary(Prevend4$Education)
+
+summary(Prevend4$Gender)
+```
+```{r}
+ggpairs(Prevend4[c("RFFT","VAT","CVD","Smoking","Hypertension")])
+pairs(Prevend4[c("RFFT","VAT","CVD","Smoking","Hypertension")])
+```
+```{r}
+ggpairs(Prevend4[c("RFFT","MAP","Chol","Statin")])
+pairs(Prevend4[c("RFFT","MAP","Chol","Statin")])
+```
+```{r}
+Prevend5<-Prevend4[-c(3)]
+
+lm.5<-lm(RFFT~., data=Prevend5)
+summary(lm(RFFT~., data=Prevend5))
+```
+```{r}
+backAIC<-step(lm.5, arg=backwards,data=Prevend5)
+
+```
+
+
+
+```{r}
+par(mfrow=c(2,3))
+plot(lm.5, 1:6)
+```
+
+```{r}
+bc5<-boxcox(lm.5)
+
+bc5$x[which.max(bc5$y)]
+```
+```{r}
+#This may suggest a square root transformation
+Prevend6<-Prevend5
+SqrtRFFT<-sqrt(Prevend5$RFFT)
+Prevend6$RFFT<-SqrtRFFT
+
+head(Prevend5)
+head(Prevend6)
+
+colname
+
+```
+
+
+```{r}
+names(Prevend6)[4]<-'sqrtRFFT'
+head(Prevend6)
+
+
+```
+
+```{r}
+lm.rooty<-lm(sqrtRFFT~., data=Prevend6)
+
+summary(lm.rooty)
+```
+
+
+```{r}
+par(mfrow=c(2,3))
+plot(lm.rooty, 1:6)
+```
+```{r}
+boxcox(lm.rooty)
+```
+```{r}
+step(lm.rooty, arg=backwards, data=Prevend6)
+```
+
+
+Back aic on our transformation 
+```{r}
+summary(lm(sqrtRFFT ~ Age + Education + VAT + Smoking + Chol + 
+    Statin,data=Prevend6))
+```
+
+
+
+
