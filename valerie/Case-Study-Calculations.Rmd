@@ -5,6 +5,13 @@ date: "3/3/2022"
 output: html_document
 ---
 
+```{r}
+library(corrplot)
+library(GGally)
+library(car)
+```
+
+
 Summary Statistics and Graphics (4 points)
 • Do this before formal model fitting.
 • Include information on data cleaning/restructuring.
@@ -12,7 +19,7 @@ Summary Statistics and Graphics (4 points)
 ```{r}
 #Data Cleaning and Restructuring
 
-Prevend<-read.csv("Prevend_Sample.csv")
+Prevend<-read.csv("./../data/Prevend_Sample.csv")
 
 head(Prevend)
 dim(Prevend)
@@ -362,7 +369,7 @@ plot(lm.5, 1:6)
 ```
 
 ```{r}
-bc5<-boxcox(lm.5)
+bc5<-boxCox(lm.5)
 
 bc5$x[which.max(bc5$y)]
 ```
@@ -375,7 +382,7 @@ Prevend6$RFFT<-SqrtRFFT
 head(Prevend5)
 head(Prevend6)
 
-colname
+# colname
 
 ```
 
@@ -399,7 +406,7 @@ par(mfrow=c(2,3))
 plot(lm.rooty, 1:6)
 ```
 ```{r}
-boxcox(lm.rooty)
+boxCox(lm.rooty)
 ```
 ```{r}
 step(lm.rooty, arg=backwards, data=Prevend6)
