@@ -1,13 +1,19 @@
 ---
-title: "Case Study"
-author: "Rodney Murray, Valerie Chavez, Tuul Purevjav, Lori Hernandez"
-date: "2/25/2022"
+title: "Case Study - Appendix A"
+author: "Valerie Chavez, Lori Hernandez, Rodney Murray, Tuul Purevjav"
+date: "3/11/2022"
 output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
+
+# Summary
+Below is the R code and resulting outputs for the analysis of the model selected for the case study. All R code used for exploration of the models is available in the following GitHub repo:
+
+https://github.com/murrayrodney/STAA-551-Case-Study 
+
 
 ```{r imports, message=FALSE}
 library(dplyr)
@@ -104,7 +110,14 @@ Because there are too many variables to generate pair plots that we can read, I 
 data_num <- select_if(data, is.numeric)
 corrs <- cor(data_num)
 corrplot(corrs)
+summary(data_num)
 ```
+
+```{r}
+data_sum <- summary(data_num)
+do.call(cbind, lapply(data, summary))
+```
+
 
 We will now look at some pairs plots to understand the potential correlations between these values.
 ```{r numerical-pair-plot}
@@ -368,7 +381,6 @@ fig <- ggplot() +
     color='red'
   ) +
   labs(x='Fitted Values', y='Absolute Residuals', title='Residual Model for WLS')
-             
 fig
 ```
 
@@ -394,15 +406,6 @@ RFFT = 67.5 + 6.16 Statin + b_E Education - 0.868 Age - 9.15 Smoking_1 + 1.73 Ch
   b_E = 80.6,\ b_{ES}=15.5,\quad  b_{EA}=-0.843 \text{ if } Education = 3\\
   \end{cases}
 $$
-```{r}
-anova_result <- anova(wls_model)
-tidy(anova_result)
-```
-```{r}
-tidy(summary(wls_model))
-data.frame(confint(wls_model))
-```
-
 
 ### Model Plots
 ```{r}
